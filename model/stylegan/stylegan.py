@@ -85,14 +85,16 @@ class stylegan(object):
         self.gan_disc_loss = -tf.reduce_mean(
             tf.add(
                 -tf.log(tf.maximum(self.disc_of_truth_out, 1e-6)),
-                -tf.log(1. - tf.maximum(self.disc_of_gen_out, 1e-6))
+                -tf.log(tf.maximum(1. - self.disc_of_gen_out, 1e-6))
             )
         )
         
         #self.disc_loss = self.wgan_disc_loss# + self.lipschitz_penalty
         self.disc_loss = self.gan_disc_loss
         
-        self.disc_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001, beta1=0, beta2=0.9)
+        self.disc_optimizer = tf.train.AdamOptimizer(
+            learning_rate=0.002, beta1=0, beta2=0.9
+        )
         self.disc_minimize = self.disc_optimizer.minimize(
             self.disc_loss,
             var_list=[v for v in tf.global_variables() if "discriminator" in v.name]
@@ -104,30 +106,41 @@ class stylegan(object):
             -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
         )
 
-        self.gen_optimizer = tf.train.AdamOptimizer(learning_rate=0.0001, beta1=0, beta2=0.9)
+        self.gen_optimizer = tf.train.AdamOptimizer(
+            learning_rate=0.002, beta1=0, beta2=0.9
+        )
         self.gen_minimize = self.gen_optimizer.minimize(
             self.gan_gen_loss,
             var_list=[v for v in tf.global_variables() if "generator" in v.name]
         )
+
+        self.mapper_loss = self.gan_gen_loss
+        self.mapper_optimizer = tf.train.AdamOptimizer(
+            learning_rate=0.01*0.002, beta1=0, beta2=0.9
+        )
+        self.mapper_minimize = self.mapper_optimizer.minimize(
+            self.mapper_loss
+        )
         
     def latentZMapper(self, Z_in, depth=8):
         result = None
-        for i in range(depth):
-            W = tf.get_variable(
-                "W_mapper_" + str(i),
-                [512, 512],
-                initializer=tf.initializers.random_normal(stddev=0.3)
-            )
-            b = tf.get_variable(
-                "b_mapper_" + str(i),
-                [512,],
-                initializer=tf.initializers.random_normal(stddev=0.3)
-            )
-            
-            if i == 0:
-                result = tf.nn.relu(tf.matmul(Z_in, W) + b)
-            else:
-                result = tf.nn.relu(tf.matmul(result, W) + b)
+        with tf.variable_scope("mapper") as vs:
+            for i in range(depth):
+                W = tf.get_variable(
+                    "W_mapper_" + str(i),
+                    [512, 512],
+                    initializer=tf.initializers.random_normal(stddev=0.3)
+                )
+                b = tf.get_variable(
+                    "b_mapper_" + str(i),
+                    [512,],
+                    initializer=tf.initializers.random_normal(stddev=0.3)
+                )
+                
+                if i == 0:
+                    result = tf.nn.relu(tf.matmul(Z_in, W) + b)
+                else:
+                    result = tf.nn.relu(tf.matmul(result, W) + b)
                 
         return result
         
@@ -579,7 +592,7 @@ class stylegan(object):
 
 # In[3]:
 
-batch_size = 4
+batch_size = 8
 sess = tf.Session()
 s = stylegan(sess, batch_size=batch_size)
 sess.run(tf.global_variables_initializer())
@@ -626,10 +639,10 @@ if train:
         iterations += 1
 
         if iterations % 5 == 0:
-            fetches = [s.gen_loss, s.gen_minimize]
+            fetches = [s.gan_gen_loss, s.gen_minimize, s.mapper_minimize]
             feeds = {}
 
-            gen_loss, _ = sess.run(fetches, feed_dict=feeds)
+            gen_loss, _1, _2 = sess.run(fetches, feed_dict=feeds)
             gen_losses.append(gen_loss)
 
         print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1])
