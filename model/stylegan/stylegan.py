@@ -7,6 +7,7 @@
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 from keras.preprocessing.image import ImageDataGenerator
 
@@ -58,14 +59,15 @@ class stylegan(object):
         self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph)
         self.disc_of_interp_out = self.evalDiscriminator(self.interp_images)
         
-        #disc_grad_truth = tf.gradients(
-        #    self.disc_of_truth_out,
-        #    [self.true_images_ph]
-        #)[0]
+        disc_grad_truth = tf.gradients(
+            self.disc_of_truth_out,
+            [self.true_images_ph]
+        )[0]
         
-        #self.r1_reg = (self.gamma/2)*tf.reduce_mean(
-        #    tf.square(disc_grad_truth)
-        #)
+        self.r1_reg = (self.gamma/2)*tf.reduce_sum(
+            tf.square(disc_grad_truth),
+            axis=[1, 2, 3]
+        )
         
         #disc_grad_interp = tf.gradients(
         #    self.disc_of_interp_out,
@@ -75,12 +77,16 @@ class stylegan(object):
         #self.lipschitz_penalty = tf.reduce_mean(
         #    tf.square(
         #        tf.sqrt(
-        #            tf.reduce_sum(disc_grad_interp*disc_grad_interp, axis=[1, 2, 3])
+        #            tf.reduce_sum(
+        #                disc_grad_interp*disc_grad_interp, axis=[1, 2, 3]
+        #            )
         #        ) - 1.
         #    )
         #)
         
-        self.wgan_disc_loss = tf.reduce_mean(self.disc_of_gen_out - self.disc_of_truth_out)
+        self.wgan_disc_loss = tf.reduce_mean(
+            self.disc_of_gen_out - self.disc_of_truth_out
+        )
         
         self.gan_disc_loss = -tf.reduce_mean(
             tf.add(
@@ -90,7 +96,7 @@ class stylegan(object):
         )
         
         #self.disc_loss = self.wgan_disc_loss# + self.lipschitz_penalty
-        self.disc_loss = self.gan_disc_loss
+        self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
             learning_rate=0.002, beta1=0, beta2=0.9
@@ -148,7 +154,7 @@ class stylegan(object):
         with tf.variable_scope("generator", reuse=tf.AUTO_REUSE) as vs:
             self.constant_input = tf.get_variable(
                 "c_1",
-                [4, 4, 512],
+                [4, 4, 256],
                 initializer=tf.initializers.orthogonal
             )
             
@@ -166,20 +172,20 @@ class stylegan(object):
             block_4_2 = self.styleBlock(
                 tiled_constant_input,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #1
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=4
             )
             
-            to_rgb_1 = self.toRgb(block_4_2, 4, 4, 512)
+            to_rgb_1 = self.toRgb(block_4_2, 4, 4, 256)
             
             block_8_1 = self.styleBlock(
                 block_4_2,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #2
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=8,
                 upsample=True
             )
@@ -187,20 +193,20 @@ class stylegan(object):
             block_8_2 = self.styleBlock(
                 block_8_1,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #3
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=8
             )
             
-            to_rgb_2 = self.toRgb(block_8_2, 8, 8, 512) + self.upsample(to_rgb_1)
+            to_rgb_2 = self.toRgb(block_8_2, 8, 8, 256) + self.upsample(to_rgb_1)
             
             block_16_1 = self.styleBlock(
                 block_8_2,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #4
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=16,
                 upsample=True
             )
@@ -208,20 +214,20 @@ class stylegan(object):
             block_16_2 = self.styleBlock(
                 block_16_1,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #5
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=16,
             )
             
-            to_rgb_3 = self.toRgb(block_16_2, 16, 16, 512) + self.upsample(to_rgb_2)
+            to_rgb_3 = self.toRgb(block_16_2, 16, 16, 256) + self.upsample(to_rgb_2)
             
             block_32_1 = self.styleBlock(
                 block_16_2,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #6
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=32,
                 upsample=True
             )
@@ -229,20 +235,20 @@ class stylegan(object):
             block_32_2 = self.styleBlock(
                 block_32_1,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #7
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=32,
             )
             
-            to_rgb_4 = self.toRgb(block_32_2, 32, 32, 512) + self.upsample(to_rgb_3)
+            to_rgb_4 = self.toRgb(block_32_2, 32, 32, 256) + self.upsample(to_rgb_3)
             
             block_64_1 = self.styleBlock(
                 block_32_2,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 #8
-                num_output_channels=512,
+                num_output_channels=256,
                 fm_dimension=64,
                 upsample=True
             )
@@ -250,7 +256,7 @@ class stylegan(object):
             block_64_2 = self.styleBlock(
                 block_64_1,
                 W_in,
-                num_input_channels=512,
+                num_input_channels=256,
                 num_output_channels=256,
                 fm_dimension=64,
             )
@@ -341,20 +347,20 @@ class stylegan(object):
             
             res_4 = downsample_4 + block_16_4
             
-            downsample_5 = self.downsample(res_4, 256)
+            downsample_5 = self.downsample(res_4, 256, 256)
             block_8_5 = self.discriminatorBlock(
                 res_4,
                 256,
-                512
+                256
             )
             
             res_5 = downsample_5 + block_8_5
             
-            downsample_6 = self.downsample(res_5, 512, 512)
+            downsample_6 = self.downsample(res_5, 256, 256)
             block_4_6 = self.discriminatorBlock(
                 res_5,
-                512,
-                512
+                256,
+                256
             )
             
             res_6 = downsample_6 + block_4_6
@@ -372,7 +378,7 @@ class stylegan(object):
             
             conv_w_a = tf.get_variable(
                 "conv_w_disc_end_3x3",
-                [3, 3, 512, 512],
+                [3, 3, 256, 256],
                 initializer=tf.initializers.orthogonal
             )
             
@@ -383,7 +389,7 @@ class stylegan(object):
             
             conv_w_b = tf.get_variable(
                 "conv_w_disc_end_4x4",
-                [4, 4, 512, 512],
+                [4, 4, 256, 256],
                 initializer=tf.initializers.orthogonal
             )
             
@@ -398,7 +404,7 @@ class stylegan(object):
             
             W_fc = tf.get_variable(
                 "fully_connected_W_disc_end",
-                [512, 1],
+                [256, 1],
                 initializer=tf.initializers.orthogonal
             )
             
@@ -525,7 +531,10 @@ class stylegan(object):
 
         V_in_c = tf.transpose(V_in_b, perm=[0, 2, 1, 3])
         V_in_d = tf.concat([V_in_c, V_in_c], axis=2)
-        V_out = tf.transpose(tf.reshape(V_in_d, [batch_size, 2*h, 2*w, c]), perm=[0, 2, 1, 3])
+        V_out = tf.transpose(
+            tf.reshape(V_in_d, [batch_size, 2*h, 2*w, c]),
+            perm=[0, 2, 1, 3]
+        )
         
         return V_out
     
@@ -620,6 +629,7 @@ num_epochs = 0
 disc_losses = [-1,]
 gen_losses = [-1,]
 iterations = 0
+start = time.time()
 
 if train:
     for x, y in data_flow:
@@ -638,6 +648,14 @@ if train:
         
         iterations += 1
 
+        raw_generated_images = sess.run(s.generator_out)
+
+        for i in range(min(raw_generated_images.shape[0], 5)):
+            plt.figure()
+            plt.imshow(np.array(raw_generated_images[i, :, :, :], dtype=np.int32))
+            plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
+            plt.close()
+
         if iterations % 5 == 0:
             fetches = [s.gan_gen_loss, s.gen_minimize, s.mapper_minimize]
             feeds = {}
@@ -645,7 +663,16 @@ if train:
             gen_loss, _1, _2 = sess.run(fetches, feed_dict=feeds)
             gen_losses.append(gen_loss)
 
-        print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1])
+            #raw_generated_images = sess.run(s.generator_out)
+
+            #for i in range(min(raw_generated_images.shape[0], 5)):
+            #    plt.figure()
+            #    plt.imshow(raw_generated_images[i, :, :, :])
+            #    plt.savefig('generated_image_' + str(iterations) + '.png')
+            #    plt.close()
+
+        print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
+        start = time.time()
 
 # In[ ]:
 
