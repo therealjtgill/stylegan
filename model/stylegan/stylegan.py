@@ -4,9 +4,10 @@
 # In[1]:
 
 
-import tensorflow as tf
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import sys
+import tensorflow as tf
 import time
 
 from keras.preprocessing.image import ImageDataGenerator
@@ -20,7 +21,6 @@ class stylegan(object):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
-        self.num_discriminator_blocks = 0
         self.num_to_rgbs = 0
         self.num_from_rgbs = 0
         self.num_downsamples = 0
@@ -155,7 +155,7 @@ class stylegan(object):
             self.constant_input = tf.get_variable(
                 "c_1",
                 [4, 4, 256],
-                initializer=tf.initializers.orthogonal
+                initializer=tf.initializers.random_normal
             )
             
             batch_size = tf.shape(W_in)[0]
@@ -178,8 +178,12 @@ class stylegan(object):
                 fm_dimension=4
             )
             
+            self.b4 = block_4_2
+
             to_rgb_1 = self.toRgb(block_4_2, 4, 4, 256)
             
+            self.r1 = to_rgb_1
+
             block_8_1 = self.styleBlock(
                 block_4_2,
                 W_in,
@@ -199,7 +203,11 @@ class stylegan(object):
                 fm_dimension=8
             )
             
+            self.b8 = block_8_2
+
             to_rgb_2 = self.toRgb(block_8_2, 8, 8, 256) + self.upsample(to_rgb_1)
+
+            self.r2 = to_rgb_2
             
             block_16_1 = self.styleBlock(
                 block_8_2,
@@ -299,7 +307,7 @@ class stylegan(object):
                 fm_dimension=256
             )
             
-            to_rgb_7 = self.toRgb(block_256_2, 256, 256, 64) + self.upsample(to_rgb_6)
+            to_rgb_7 = tf.nn.tanh(self.toRgb(block_256_2, 256, 256, 64) + self.upsample(to_rgb_6))
             
             return to_rgb_7
             
@@ -313,7 +321,8 @@ class stylegan(object):
             block_128_1 = self.discriminatorBlock(
                 from_rgb_1,
                 16,
-                32
+                32,
+                id=1
             )
             
             res_1 = downsample_1 + block_128_1
@@ -322,7 +331,8 @@ class stylegan(object):
             block_64_2 = self.discriminatorBlock(
                 res_1,
                 32,
-                64
+                64,
+                id=2
             )
             
             res_2 = downsample_2 + block_64_2
@@ -333,7 +343,8 @@ class stylegan(object):
             block_32_3 = self.discriminatorBlock(
                 res_2,
                 64,
-                128
+                128,
+                id=3
             )
             
             res_3 = downsample_3 + block_32_3
@@ -342,7 +353,8 @@ class stylegan(object):
             block_16_4 = self.discriminatorBlock(
                 res_3,
                 128,
-                256
+                256,
+                id=4
             )
             
             res_4 = downsample_4 + block_16_4
@@ -351,7 +363,8 @@ class stylegan(object):
             block_8_5 = self.discriminatorBlock(
                 res_4,
                 256,
-                256
+                256,
+                id=5
             )
             
             res_5 = downsample_5 + block_8_5
@@ -360,7 +373,8 @@ class stylegan(object):
             block_4_6 = self.discriminatorBlock(
                 res_5,
                 256,
-                256
+                256,
+                id=6
             )
             
             res_6 = downsample_6 + block_4_6
@@ -424,15 +438,14 @@ class stylegan(object):
 
             return disc_out
             
-    def discriminatorBlock(self, V_in, num_input_channels, num_output_channels, downsample=True):
+    def discriminatorBlock(self, V_in, num_input_channels, num_output_channels, downsample=True, id=0):
         # V_in        --> [batch_size, height, width, num_input_channels]
         # latent_w    --> [batch_size, 512]
         #    num_input_channels  = number of input feature maps
         #    num_output_channels = number of output feature maps
-        self.num_discriminator_blocks += 1
         
         conv_weight_a = tf.get_variable(
-            "conv_w_disc_a_" + str(self.num_discriminator_blocks),
+            "conv_w_disc_a_" + str(id),
             [3, 3, num_input_channels, num_input_channels],
             initializer=tf.initializers.orthogonal
         )
@@ -443,7 +456,7 @@ class stylegan(object):
         )
         
         conv_weight_b = tf.get_variable(
-            "conv_w_disc_b_" + str(self.num_discriminator_blocks),
+            "conv_w_disc_b_" + str(id),
             [3, 3, num_input_channels, num_output_channels],
             initializer=tf.initializers.orthogonal
         )
@@ -471,13 +484,15 @@ class stylegan(object):
             "A_style" + str(self.num_style_blocks),
             [512, num_input_channels],
             #[512, num_output_channels],
-            initializer=tf.initializers.orthogonal
+            #initializer=tf.initializers.orthogonal
+            initializer=tf.initializers.random_normal
         )
         
         conv_weight = tf.get_variable(
             "conv_w_style" + str(self.num_style_blocks),
             [3, 3, num_input_channels, num_output_channels],
-            initializer=tf.initializers.orthogonal
+            #initializer=tf.initializers.orthogonal
+            initializer=tf.initializers.random_normal
         )
         
         conv_bias = tf.get_variable(
@@ -506,8 +521,8 @@ class stylegan(object):
         #print("conv_weight", conv_weight)
         #modul_conv_weight = tf.einsum("bc,hwjc->bhwjc", scale, conv_weight)
         modul_conv_weight = tf.einsum("bj,hwjc->bhwjc", scale, conv_weight)
-        sigma_j = tf.sqrt(tf.reduce_sum(tf.square(modul_conv_weight), axis=[1, 2, 3]) + 1e-6)
-        
+        sigma_j = 1./tf.sqrt(tf.reduce_sum(tf.square(modul_conv_weight), axis=[1, 2, 3]) + 1e-6)
+
         #print("calculate output")
         #print("V_in_scaled", V_in_scaled)
         #print("sigma_j", sigma_j)
@@ -522,25 +537,28 @@ class stylegan(object):
     def upsample(self, V_in):
         # Tested with the channel dimension.
         fm_size = tf.shape(V_in)
-        batch_size = fm_size[0]
+        b = fm_size[0]
         h = fm_size[1]
         w = fm_size[2]
         c = fm_size[3]
-        V_in_a = tf.concat([V_in, V_in,], axis=2)
-        V_in_b = tf.reshape(V_in_a, [batch_size, 2*h, w, c])
+        # V_in_a = tf.concat([V_in, V_in,], axis=2)
+        # V_in_b = tf.reshape(V_in_a, [b, 2*h, w, c])
 
-        V_in_c = tf.transpose(V_in_b, perm=[0, 2, 1, 3])
-        V_in_d = tf.concat([V_in_c, V_in_c], axis=2)
-        V_out = tf.transpose(
-            tf.reshape(V_in_d, [batch_size, 2*h, 2*w, c]),
-            perm=[0, 2, 1, 3]
-        )
+        # V_in_c = tf.transpose(V_in_b, perm=[0, 2, 1, 3])
+        # V_in_d = tf.concat([V_in_c, V_in_c], axis=2)
+        # V_out = tf.transpose(
+        #     tf.reshape(V_in_d, [b, 2*h, 2*w, c]),
+        #     perm=[0, 2, 1, 3]
+        # )
         
+        V_out = tf.image.resize_bilinear(V_in, (2*h, 2*w))
         return V_out
     
     def downsample(self, V_in, input_channels, output_channels=None):
         self.num_downsamples += 1
-        
+        V_in_shape = tf.shape(V_in)
+        h = V_in_shape[1]
+        w = V_in_shape[2]
         if output_channels is None:
             output_channels = 2*input_channels
         
@@ -554,6 +572,7 @@ class stylegan(object):
         )
         
         V_out = tf.nn.max_pool2d(V_larger, ksize=2, strides=2, padding="VALID")
+        #V_out = tf.image.resize_bilinear(V_larger, (h//2, w//2))
         return V_out
     
     def toRgb(self, V_in, h, w, c):
@@ -572,7 +591,7 @@ class stylegan(object):
         #print("###############")
         #print("V_in:", V_in)
         #print("to_rgb:", to_rgb)
-        rgb_out = tf.nn.relu(
+        rgb_out = tf.nn.tanh(
             tf.nn.conv2d(V_in, to_rgb, padding="SAME")
         )
         
@@ -603,15 +622,21 @@ class stylegan(object):
 
 batch_size = 8
 sess = tf.Session()
+
+
 s = stylegan(sess, batch_size=batch_size)
 sess.run(tf.global_variables_initializer())
-
+#sys.exit()
 
 # In[ ]:
 
+def scale_and_shift_pixels(image_in):
+    image_out = np.array(2.*image_in/255. - 1, dtype=np.float32)
+    return image_out
 
 gan_data_generator = ImageDataGenerator(
     rescale=1,
+    preprocessing_function=scale_and_shift_pixels,
     horizontal_flip=True,
 )
 
@@ -631,6 +656,17 @@ gen_losses = [-1,]
 iterations = 0
 start = time.time()
 
+# raw_generated_images = sess.run(s.generator_out)
+
+# weird_things = sess.run([s.b4, s.b8, s.r1, s.r2])
+# print(weird_things)
+
+# for i in range(min(raw_generated_images.shape[0], 5)):
+#     plt.figure()
+#     plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
+#     plt.savefig('generated_image_test' + '.png')
+#     plt.close()
+
 if train:
     for x, y in data_flow:
         #num_images += x.shape[0]
@@ -648,13 +684,17 @@ if train:
         
         iterations += 1
 
-        raw_generated_images = sess.run(s.generator_out)
+        # img_gen_start_time = time.time()
+        # raw_generated_images = sess.run(s.generator_out)
 
-        for i in range(min(raw_generated_images.shape[0], 5)):
-            plt.figure()
-            plt.imshow(np.array(raw_generated_images[i, :, :, :], dtype=np.int32))
-            plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
-            plt.close()
+        # for i in range(min(raw_generated_images.shape[0], 5)):
+        #     plt.figure()
+        #     plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
+        #     print((raw_generated_images[i, :, :, :] + 1.)/2.)
+        #     plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
+        #     plt.close()
+
+        # print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
 
         if iterations % 5 == 0:
             fetches = [s.gan_gen_loss, s.gen_minimize, s.mapper_minimize]
@@ -705,13 +745,17 @@ sess = tf.Session()
 
 # In[ ]:
 
+sizes = tf.shape(a)
+d1 = sizes[0]
+d2 = sizes[1]
+d3 = sizes[2]
 
 b = tf.concat([a, a,], axis=2)
-c = tf.reshape(b, [3,6,3])
+c = tf.reshape(b, [d1,2*d2,d3])
 
 d = tf.transpose(c, perm=[0, 2, 1])
 e = tf.concat([d, d], axis=2)
-f = tf.transpose(tf.reshape(e, [3, 6, 6]), perm=[0, 2, 1])
+f = tf.transpose(tf.reshape(e, [d1, 2*d2, 2*d3]), perm=[0, 2, 1])
 
 g = tf.stack([a, 2*a, 3.4*a], axis=3)
 h = tf.concat([g, g], axis=2)
