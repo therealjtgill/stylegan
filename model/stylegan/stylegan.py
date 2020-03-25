@@ -703,13 +703,17 @@ if train:
             gen_loss, _1, _2 = sess.run(fetches, feed_dict=feeds)
             gen_losses.append(gen_loss)
 
-            #raw_generated_images = sess.run(s.generator_out)
+            img_gen_start_time = time.time()
+            raw_generated_images = sess.run(s.generator_out)
 
-            #for i in range(min(raw_generated_images.shape[0], 5)):
-            #    plt.figure()
-            #    plt.imshow(np.array(raw_generated_images[i, :, :, :], dtype=np.int32))
-            #    plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
-            #    plt.close()
+            for i in range(min(raw_generated_images.shape[0], 5)):
+                plt.figure()
+                plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
+                print((raw_generated_images[i, :, :, :] + 1.)/2.)
+                plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
+                plt.close()
+
+            print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
 
         print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
         start = time.time()
