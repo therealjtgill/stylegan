@@ -667,8 +667,8 @@ if train:
 
             #for i in range(min(raw_generated_images.shape[0], 5)):
             #    plt.figure()
-            #    plt.imshow(raw_generated_images[i, :, :, :])
-            #    plt.savefig('generated_image_' + str(iterations) + '.png')
+            #    plt.imshow(np.array(raw_generated_images[i, :, :, :], dtype=np.int32))
+            #    plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
             #    plt.close()
 
         print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
