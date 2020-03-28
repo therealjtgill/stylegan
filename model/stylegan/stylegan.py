@@ -17,13 +17,12 @@ from keras.preprocessing.image import ImageDataGenerator
 
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=10):
+    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
         self.num_to_rgbs = 0
         self.num_from_rgbs = 0
-        self.num_downsamples = 0
         self.batch_size = batch_size
         self.gamma = gamma
         
@@ -44,30 +43,32 @@ class stylegan(object):
         
         self.generator_out = self.evalGenerator(self.latent_w)
         
-        e = tf.random.uniform(
-            shape=[self.batch_size], minval=0., maxval=1., dtype=tf.float32
-        )
+        # e = tf.random.uniform(
+        #     shape=[self.batch_size], minval=0., maxval=1., dtype=tf.float32
+        # )
         
         print(self.generator_out)
         
-        self.interp_images = tf.add(
-            tf.einsum("b,bhwc->bhwc", e, self.generator_out),
-            tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
-        )
+        # self.interp_images = tf.add(
+        #     tf.einsum("b,bhwc->bhwc", e, self.generator_out),
+        #     tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
+        # )
         
-        self.disc_of_gen_out = self.evalDiscriminator(self.generator_out)
-        self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph)
-        self.disc_of_interp_out = self.evalDiscriminator(self.interp_images)
+        self.disc_of_gen_out = self.evalDiscriminator(self.generator_out, False)
+        self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph, True)
+        #self.disc_of_interp_out = self.evalDiscriminator(self.interp_images, True)
         
-        disc_grad_truth = tf.gradients(
-            self.disc_of_truth_out,
-            [self.true_images_ph]
-        )[0]
-        
-        self.r1_reg = (self.gamma/2)*tf.reduce_sum(
-            tf.square(disc_grad_truth),
-            axis=[1, 2, 3]
-        )
+        self.r1_reg = 0.0
+        if use_r1_reg:
+            disc_grad_truth = tf.gradients(
+                self.disc_of_truth_out,
+                [self.true_images_ph]
+            )[0]
+            
+            self.r1_reg = (self.gamma/2)*tf.reduce_sum(
+                tf.square(disc_grad_truth),
+                axis=[1, 2, 3]
+            )
         
         #disc_grad_interp = tf.gradients(
         #    self.disc_of_interp_out,
@@ -83,37 +84,35 @@ class stylegan(object):
         #        ) - 1.
         #    )
         #)
+
+        # self.wgan_disc_loss = tf.reduce_mean(
+        #     self.disc_of_gen_out - self.disc_of_truth_out
+        # )
         
-        self.wgan_disc_loss = tf.reduce_mean(
-            self.disc_of_gen_out - self.disc_of_truth_out
-        )
-        
-        self.gan_disc_loss = -tf.reduce_mean(
-            tf.add(
-                -tf.log(tf.maximum(self.disc_of_truth_out, 1e-6)),
-                -tf.log(tf.maximum(1. - self.disc_of_gen_out, 1e-6))
-            )
+        self.gan_disc_loss = tf.add(
+            tf.reduce_mean(-tf.log(tf.maximum(self.disc_of_truth_out, 1e-6))),    
+            tf.reduce_mean(-tf.log(tf.maximum(1. - self.disc_of_gen_out, 1e-6)))
         )
         
         #self.disc_loss = self.wgan_disc_loss# + self.lipschitz_penalty
         self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.002, beta1=0, beta2=0.9
+            learning_rate=0.0005, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         self.disc_minimize = self.disc_optimizer.minimize(
             self.disc_loss,
             var_list=[v for v in tf.global_variables() if "discriminator" in v.name]
         )
         
-        self.wgan_gen_loss = tf.reduce_mean(-self.disc_of_gen_out)
+        #self.wgan_gen_loss = tf.reduce_mean(-self.disc_of_gen_out)
 
         self.gan_gen_loss = tf.reduce_mean(
             -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.002, beta1=0, beta2=0.9
+            learning_rate=0.0005, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         self.gen_minimize = self.gen_optimizer.minimize(
             self.gan_gen_loss,
@@ -122,25 +121,26 @@ class stylegan(object):
 
         self.mapper_loss = self.gan_gen_loss
         self.mapper_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.01*0.002, beta1=0, beta2=0.9
+            learning_rate=0.01*0.002, beta1=0.9, beta2=0.9
         )
         self.mapper_minimize = self.mapper_optimizer.minimize(
-            self.mapper_loss
+            self.mapper_loss,
+            var_list=[v for v in tf.global_variables() if "mapper" in v.name]
         )
         
-    def latentZMapper(self, Z_in, depth=8):
+    def latentZMapper(self, Z_in, depth=8, reuse=False):
         result = None
-        with tf.variable_scope("mapper") as vs:
+        with tf.variable_scope("mapper", reuse=reuse) as vs:
             for i in range(depth):
                 W = tf.get_variable(
                     "W_mapper_" + str(i),
                     [512, 512],
-                    initializer=tf.initializers.random_normal(stddev=0.3)
+                    initializer=tf.initializers.glorot_normal()
                 )
                 b = tf.get_variable(
                     "b_mapper_" + str(i),
                     [512,],
-                    initializer=tf.initializers.random_normal(stddev=0.3)
+                    initializer=tf.initializers.random_normal(0, 0.4)
                 )
                 
                 if i == 0:
@@ -155,7 +155,7 @@ class stylegan(object):
             self.constant_input = tf.get_variable(
                 "c_1",
                 [4, 4, 256],
-                initializer=tf.initializers.random_normal
+                initializer=tf.initializers.glorot_normal()
             )
             
             batch_size = tf.shape(W_in)[0]
@@ -311,13 +311,13 @@ class stylegan(object):
             
             return to_rgb_7
             
-    def evalDiscriminator(self, rgb_in):
-        with tf.variable_scope("discriminator", reuse=tf.AUTO_REUSE) as vs:
-            from_rgb_1 = self.fromRgb(rgb_in, 256, 256, 16)
+    def evalDiscriminator(self, rgb_in, reuse):
+        with tf.variable_scope("discriminator", reuse=reuse) as vs:
+            from_rgb_1 = self.fromRgb(rgb_in, 256, 256, 16, id=1)
             
             print("from rgb:", from_rgb_1)
             
-            downsample_1 = self.downsample(from_rgb_1, 16)
+            downsample_1 = self.downsample(from_rgb_1, 16, id=1)
             block_128_1 = self.discriminatorBlock(
                 from_rgb_1,
                 16,
@@ -327,7 +327,7 @@ class stylegan(object):
             
             res_1 = downsample_1 + block_128_1
             print("res 1:", res_1)
-            downsample_2 = self.downsample(res_1, 32)
+            downsample_2 = self.downsample(res_1, 32, id=2)
             block_64_2 = self.discriminatorBlock(
                 res_1,
                 32,
@@ -339,7 +339,7 @@ class stylegan(object):
             
             print("res 2:", res_2)
             
-            downsample_3 = self.downsample(res_2, 64)
+            downsample_3 = self.downsample(res_2, 64, id=3)
             block_32_3 = self.discriminatorBlock(
                 res_2,
                 64,
@@ -349,7 +349,7 @@ class stylegan(object):
             
             res_3 = downsample_3 + block_32_3
             
-            downsample_4 = self.downsample(res_3, 128)
+            downsample_4 = self.downsample(res_3, 128, id=4)
             block_16_4 = self.discriminatorBlock(
                 res_3,
                 128,
@@ -359,7 +359,7 @@ class stylegan(object):
             
             res_4 = downsample_4 + block_16_4
             
-            downsample_5 = self.downsample(res_4, 256, 256)
+            downsample_5 = self.downsample(res_4, 256, 256, id=5)
             block_8_5 = self.discriminatorBlock(
                 res_4,
                 256,
@@ -369,7 +369,7 @@ class stylegan(object):
             
             res_5 = downsample_5 + block_8_5
             
-            downsample_6 = self.downsample(res_5, 256, 256)
+            downsample_6 = self.downsample(res_5, 256, 256, id=6)
             block_4_6 = self.discriminatorBlock(
                 res_5,
                 256,
@@ -378,22 +378,11 @@ class stylegan(object):
             )
             
             res_6 = downsample_6 + block_4_6
-            
-            #downsample_7 = self.downsample(res_6, 512, 512)
-            #block_4_7 = self.discriminatorBlock(
-            #    res_6,
-            #    512,
-            #    512
-            #)
-            #
-            #res_7 = downsample_7 + block_4_7
-            
-            #print("res 7:", res_7)
-            
+
             conv_w_a = tf.get_variable(
                 "conv_w_disc_end_3x3",
                 [3, 3, 256, 256],
-                initializer=tf.initializers.orthogonal
+                initializer=tf.initializers.glorot_normal()
             )
             
             conv_out_1 = tf.nn.leaky_relu(
@@ -404,7 +393,7 @@ class stylegan(object):
             conv_w_b = tf.get_variable(
                 "conv_w_disc_end_4x4",
                 [4, 4, 256, 256],
-                initializer=tf.initializers.orthogonal
+                initializer=tf.initializers.glorot_normal()
             )
             
             conv_out_2 = tf.nn.leaky_relu(
@@ -419,19 +408,15 @@ class stylegan(object):
             W_fc = tf.get_variable(
                 "fully_connected_W_disc_end",
                 [256, 1],
-                initializer=tf.initializers.orthogonal
+                initializer=tf.initializers.glorot_normal()
             )
             
             b_fc = tf.get_variable(
                 "fully_connected_b_disc_end",
                 [1],
-                initializer=tf.initializers.random_normal
+                initializer=tf.initializers.random_normal(0, 0.4)
             )
-            
-            #disc_out = tf.nn.leaky_relu(
-            #    tf.matmul(conv_outputs_flat, W_fc) + b_fc
-            #)
-            
+
             disc_out = tf.nn.sigmoid(
                 tf.matmul(conv_outputs_flat, W_fc) + b_fc
             )
@@ -447,7 +432,7 @@ class stylegan(object):
         conv_weight_a = tf.get_variable(
             "conv_w_disc_a_" + str(id),
             [3, 3, num_input_channels, num_input_channels],
-            initializer=tf.initializers.orthogonal
+            initializer=tf.initializers.glorot_normal()
         )
         
         V_out_a = tf.nn.leaky_relu(
@@ -458,7 +443,7 @@ class stylegan(object):
         conv_weight_b = tf.get_variable(
             "conv_w_disc_b_" + str(id),
             [3, 3, num_input_channels, num_output_channels],
-            initializer=tf.initializers.orthogonal
+            initializer=tf.initializers.glorot_normal()
         )
         
         V_out_b = tf.nn.leaky_relu(
@@ -466,7 +451,7 @@ class stylegan(object):
             alpha=0.2
         )
         
-        V_out = self.downsample(V_out_b, num_output_channels, num_output_channels)
+        V_out = self.downsample(V_out_b, num_output_channels, num_output_channels, id+100)
         
         return V_out
             
@@ -484,21 +469,21 @@ class stylegan(object):
             "A_style" + str(self.num_style_blocks),
             [512, num_input_channels],
             #[512, num_output_channels],
-            #initializer=tf.initializers.orthogonal
-            initializer=tf.initializers.random_normal
+            #initializer=tf.initializers.glorot_normal()
+            initializer=tf.initializers.glorot_normal()
         )
         
         conv_weight = tf.get_variable(
             "conv_w_style" + str(self.num_style_blocks),
             [3, 3, num_input_channels, num_output_channels],
-            #initializer=tf.initializers.orthogonal
-            initializer=tf.initializers.random_normal
+            #initializer=tf.initializers.glorot_normal()
+            initializer=tf.initializers.glorot_normal()
         )
         
         conv_bias = tf.get_variable(
             "conv_b_style" + str(self.num_style_blocks),
             [1, fm_dimension, fm_dimension, num_output_channels],
-            initializer=tf.initializers.random_normal
+            initializer=tf.initializers.glorot_normal()
         )
         
         # Affine transformation of latent space vector.
@@ -554,22 +539,24 @@ class stylegan(object):
         V_out = tf.image.resize_bilinear(V_in, (2*h, 2*w))
         return V_out
     
-    def downsample(self, V_in, input_channels, output_channels=None):
-        self.num_downsamples += 1
+    def downsample(self, V_in, input_channels, output_channels=None, id=0):
+        
         V_in_shape = tf.shape(V_in)
         h = V_in_shape[1]
         w = V_in_shape[2]
+        V_larger = V_in
         if output_channels is None:
             output_channels = 2*input_channels
-        
-        channel_increase = tf.get_variable(
-            "channel_increaser" + str(self.num_downsamples),
-            [1, 1, input_channels, output_channels]
-        )
-        
-        V_larger = tf.nn.relu(
-            tf.nn.conv2d(V_in, channel_increase, padding="SAME")
-        )
+    
+        if output_channels != input_channels:
+            channel_increase = tf.get_variable(
+                "channel_increaser" + str(id),
+                [1, 1, input_channels, output_channels]
+            )
+            
+            V_larger = tf.nn.relu(
+                tf.nn.conv2d(V_in, channel_increase, padding="SAME")
+            )
         
         V_out = tf.nn.max_pool2d(V_larger, ksize=2, strides=2, padding="VALID")
         #V_out = tf.image.resize_bilinear(V_larger, (h//2, w//2))
@@ -586,7 +573,7 @@ class stylegan(object):
         to_rgb = tf.get_variable(
             "to_rgb" + str(self.num_to_rgbs),
             [h, w, c, 3],
-            initializer=tf.initializers.random_normal
+            initializer=tf.initializers.glorot_normal()
         )
         #print("###############")
         #print("V_in:", V_in)
@@ -597,18 +584,16 @@ class stylegan(object):
         
         return rgb_out
     
-    def fromRgb(self, V_in, h, w, c):
+    def fromRgb(self, V_in, h, w, c, id=0):
         '''
         Convert an NxNx3 output block to an feature map with dimensions
         NxNxC.
         '''
-        
-        self.num_from_rgbs += 1
-        
+
         from_rgb = tf.get_variable(
-            "from_rgb" + str(self.num_from_rgbs),
+            "from_rgb" + str(id),
             [h, w, 3, c],
-            initializer=tf.initializers.random_normal
+            initializer=tf.initializers.glorot_normal()
         )
         
         feature_map_out = tf.nn.relu(
@@ -623,10 +608,17 @@ class stylegan(object):
 batch_size = 8
 sess = tf.Session()
 
-
-s = stylegan(sess, batch_size=batch_size)
+s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
 sess.run(tf.global_variables_initializer())
-#sys.exit()
+print("Initialized variables")
+saver = tf.train.Saver(max_to_keep=3)
+print("Initialized saver")
+
+# print("tensorflow variables:")
+# sorted_varnames = sorted([v.name for v in tf.global_variables()])
+# for var in sorted_varnames:
+#     print(var)
+# sys.exit(-1)
 
 # In[ ]:
 
@@ -634,6 +626,7 @@ def scale_and_shift_pixels(image_in):
     image_out = np.array(2.*image_in/255. - 1, dtype=np.float32)
     return image_out
 
+print("Defining generators")
 gan_data_generator = ImageDataGenerator(
     rescale=1,
     preprocessing_function=scale_and_shift_pixels,
@@ -646,7 +639,7 @@ data_flow = gan_data_generator.flow_from_directory(
     batch_size=batch_size,
     shuffle=True
 )
-
+print("Initialized generators")
 train = True
 
 num_images = 0
@@ -656,8 +649,9 @@ gen_losses = [-1,]
 iterations = 0
 start = time.time()
 
-# raw_generated_images = sess.run(s.generator_out)
-
+#raw_generated_images = sess.run(s.generator_out)
+saver.save(sess, "stylegan2_ckpt", global_step=123456)
+summary_writer = tf.summary.FileWriter("logs", sess.graph)
 # weird_things = sess.run([s.b4, s.b8, s.r1, s.r2])
 # print(weird_things)
 
@@ -668,20 +662,27 @@ start = time.time()
 #     plt.close()
 
 if train:
-    for x, y in data_flow:
+    for x, _ in data_flow:
+        if iterations == 3:
+            break
         #num_images += x.shape[0]
         #print(num_images)
+        print("min, max of training image:", np.min(x[0, :, :, :]), np.max(x[0, :, :, :]))
+
+        disc_start_time = time.time()
         if num_epochs == 20:
             break
         if x.shape[0] != batch_size:
             num_epochs += 1
             continue
-        fetches = [s.disc_loss, s.disc_minimize]
+        fetches = [s.disc_loss, s.disc_minimize, s.disc_of_gen_out, s.disc_of_truth_out]
         feeds = {s.true_images_ph: x}
         
-        loss, _ = sess.run(fetches, feed_dict=feeds)
+        loss, _, real_pred, fake_pred = sess.run(fetches, feed_dict=feeds)
         disc_losses.append(loss)
-        
+        print("discriminator run/loss time:", time.time() - disc_start_time)
+        print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
+
         iterations += 1
 
         # img_gen_start_time = time.time()
@@ -709,7 +710,7 @@ if train:
             for i in range(min(raw_generated_images.shape[0], 5)):
                 plt.figure()
                 plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
-                print((raw_generated_images[i, :, :, :] + 1.)/2.)
+                #print((raw_generated_images[i, :, :, :] + 1.)/2.)
                 plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
                 plt.close()
 
@@ -717,69 +718,3 @@ if train:
 
         print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
         start = time.time()
-
-# In[ ]:
-
-
-a = tf.constant(
-    np.array(
-        [
-            [[1,2,3],
-             [4,5,6],
-             [7,8,9]
-            ],
-            [[-1,-2,-3],
-             [-4,-5,-6],
-             [-7,-8,-9]
-            ],
-            [[1.2,2.2,3.2],
-             [4.2,5.2,6.2],
-             [7.2,8.2,9.2]
-            ],
-        ]
-    )
-)
-
-
-# In[ ]:
-
-
-sess = tf.Session()
-
-
-# In[ ]:
-
-sizes = tf.shape(a)
-d1 = sizes[0]
-d2 = sizes[1]
-d3 = sizes[2]
-
-b = tf.concat([a, a,], axis=2)
-c = tf.reshape(b, [d1,2*d2,d3])
-
-d = tf.transpose(c, perm=[0, 2, 1])
-e = tf.concat([d, d], axis=2)
-f = tf.transpose(tf.reshape(e, [d1, 2*d2, 2*d3]), perm=[0, 2, 1])
-
-g = tf.stack([a, 2*a, 3.4*a], axis=3)
-h = tf.concat([g, g], axis=2)
-i = tf.reshape(h, [3, 6, 3, 3])
-j = tf.transpose(i, perm=[0, 2, 1, 3])
-k = tf.concat([j, j], axis=2)
-l = tf.transpose(tf.reshape(k, [3, 6, 6, 3]), perm=[0, 2, 1, 3])
-
-for i in range(3):
-    print(sess.run(l)[:, :, :, i])
-
-
-# In[ ]:
-
-
-sess.run(c)
-
-
-# In[ ]:
-
-
-sess.run(f)
-
