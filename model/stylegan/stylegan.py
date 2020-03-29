@@ -9,6 +9,7 @@ import numpy as np
 import sys
 import tensorflow as tf
 import time
+from utils import scale_and_shift_pixels
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -17,13 +18,14 @@ from keras.preprocessing.image import ImageDataGenerator
 # In[2]:
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True):
+    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True, config=None):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
         self.num_to_rgbs = 0
         self.batch_size = batch_size
         self.gamma = gamma
+        
         self.config = [
             (256, 256, 4),
             (256, 256, 8),
@@ -33,6 +35,8 @@ class stylegan(object):
             (256, 128, 128),
             (128, 64, 256)
         ]
+        if config is not None:
+            self.config = config
 
         self.disc_layer_outputs = []
         
@@ -119,7 +123,7 @@ class stylegan(object):
         self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.0001, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(
@@ -155,7 +159,7 @@ class stylegan(object):
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.0001, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -728,13 +732,42 @@ class stylegan(object):
         
         return feature_map_out
 
+    def trainDiscriminatorBatch(self, true_images):
+        fetches = [
+            self.disc_loss,
+            self.disc_minimize,
+            self.disc_of_gen_out,
+            self.disc_of_truth_out,
+        ]
+        feeds = {
+            self.true_images_ph: true_images
+        }
+        
+        loss, _, fake_pred, real_pred = self.sess.run(fetches, feed_dict=feeds)
+        return loss, fake_pred, real_pred
+
+    def trainGeneratorBatch(self):
+        fetches = [
+            self.gan_gen_loss,
+            self.gen_minimize,
+            self.mapper_minimize,
+            self.generator_out
+        ]
+
+        gen_loss, _1, _2, gen_out = self.sess.run(fetches, feed_dict={})
+
+        return gen_loss, gen_out
+
+    def runGeneratorBatch(self):
+        raw_generated_images = self.sess.run(self.generator_out)
+
 
 # In[3]:
 
 batch_size = 8
 sess = tf.Session()
 
-s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=False)
+s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
 sess.run(tf.global_variables_initializer())
 print("Initialized variables")
 saver = tf.train.Saver(max_to_keep=3)
@@ -747,10 +780,6 @@ print("Initialized saver")
 # sys.exit(-1)
 
 # In[ ]:
-
-def scale_and_shift_pixels(image_in):
-    image_out = np.array(2.*image_in/255. - 1, dtype=np.float32)
-    return image_out
 
 print("Defining generators")
 gan_data_generator = ImageDataGenerator(
@@ -793,18 +822,9 @@ if train:
         if x.shape[0] != batch_size:
             num_epochs += 1
             continue
-        fetches = [
-            s.disc_loss,
-            s.disc_minimize,
-            s.disc_of_gen_out,
-            s.disc_of_truth_out,
-            s.disc_layer_outputs
-        ]
-        feeds = {
-            s.true_images_ph: x
-        }
-        
-        loss, _, fake_pred, real_pred, layer_outs = sess.run(fetches, feed_dict=feeds)
+
+        loss, fake_pred, real_pred = s.trainDiscriminatorBatch(x)
+
         disc_losses.append(loss)
         print("discriminator run/loss time:", time.time() - disc_start_time)
         print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
@@ -831,7 +851,7 @@ if train:
         #         f.write(n + "\n\n" + str(w) + "\n")
 
         # img_gen_start_time = time.time()
-        # raw_generated_images = sess.run(s.generator_out)
+        # raw_generated_images = s.runGeneratorBatch()
 
         # for i in range(min(raw_generated_images.shape[0], 5)):
         #     plt.figure()
@@ -845,14 +865,9 @@ if train:
         iterations += 1
 
         if iterations % 5 == 0:
-            fetches = [s.gan_gen_loss, s.gen_minimize, s.mapper_minimize]
-            feeds = {}
-
-            gen_loss, _1, _2 = sess.run(fetches, feed_dict=feeds)
-            gen_losses.append(gen_loss)
-
             img_gen_start_time = time.time()
-            raw_generated_images = sess.run(s.generator_out)
+            gen_loss, raw_generated_images = s.trainGeneratorBatch()
+            gen_losses.append(gen_loss)
 
             for i in range(min(raw_generated_images.shape[0], 5)):
                 plt.figure()

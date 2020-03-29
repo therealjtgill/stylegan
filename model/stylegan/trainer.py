@@ -56,9 +56,39 @@ def main(argv):
       shuffle=True
    )
 
-   iterations = 0
+   disc_losses    = []
+   gen_losses     = []
+   num_epochs     = 0
+   num_iterations = 0
    for x, _ in data_flow:
+      train_start_time = time.time()
+      if x.shape[0] != batch_size:
+         num_epochs += 1
+         continue
 
+      loss, fake_pred, real_pred = model.trainDiscriminatorBatch(x)
+      disc_losses.append(loss)
+      print("discriminator run/loss time:", time.time() - disc_start_time)
+      print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
+
+      num_iterations += 1
+
+      if iterations % 5 == 0:
+         gen_loss, gen_images = model.trainGeneratorBatch()
+         gen_losses.append(gen_loss)
+
+         gen_images = model.runGeneratorBatch()
+
+         for i in range(min(gen_images.shape[0], 5)):
+            plt.figure()
+            plt.imshow(np.array((gen_images[i, :, :, :] + 1.)/2.))
+            save_filename = os.path.join(
+               args.outdir,
+               'generated_image_' + str(iterations) + '_' + str(i) + '.png'
+            )
+            plt.savefig(save_filename)
+            plt.close()
+      print("Iteration ", i, " took ", time.time() - train_start_time, " seconds.")
 
 if __name__ == "__main__":
    main(sys.argv)
