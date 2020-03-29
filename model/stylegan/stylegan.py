@@ -25,13 +25,13 @@ class stylegan(object):
         self.batch_size = batch_size
         self.gamma = gamma
         self.config = [
-            (256, 256, 4)
+            (256, 256, 4),
             (256, 256, 8),
             (256, 256, 16),
             (256, 256, 32),
             (256, 256, 64),
-            (256, 128, 126),
-            (128, 64, 246)
+            (256, 128, 128),
+            (128, 64, 256)
         ]
 
         self.disc_layer_outputs = []
@@ -119,7 +119,7 @@ class stylegan(object):
         self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.0001, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(
@@ -155,7 +155,7 @@ class stylegan(object):
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.0001, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -234,7 +234,7 @@ class stylegan(object):
                 num_output_channels=c_out,
                 fm_dimension=k
             )
-            to_rgb = self.toRgb(block, fm_dimension, fm_dimension, c_out)
+            to_rgb = self.toRgb(block_2, k, k, c_out)
 
             for c_in, c_out, k in config[1:]:
 
@@ -258,10 +258,7 @@ class stylegan(object):
                 to_rgb = self.toRgb(block_2, k, k, c_out) + self.upsample(to_rgb)
                 
             c_in, c_out, k = config[-1]
-            rgb_out = tf.nn.tanh(
-                self.toRgb(block_2, k, k, c_out) +
-                self.upsample(to_rgb)
-            )
+            rgb_out = tf.nn.tanh(to_rgb)
 
             return rgb_out
         
@@ -812,26 +809,26 @@ if train:
         print("discriminator run/loss time:", time.time() - disc_start_time)
         print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
 
-        disc_weight_names = [w.name for w in tf.trainable_variables(scope="discriminator")]
-        weights = sess.run(disc_weight_names)
+        # disc_weight_names = [w.name for w in tf.trainable_variables(scope="discriminator")]
+        # weights = sess.run(disc_weight_names)
 
-        with open("discriminator_layer_output_mags_" + str(iterations) + ".txt", "w") as f:
-            for i, disc_call in enumerate(layer_outs):
-                f.write("discriminator call #" + str(i) + "\n\n\n")
-                for j, layer_out in enumerate(disc_call):
-                    f.write("layer " + str(j) + "\n")
-                    f.write(str(np.sqrt(np.sum(np.square(layer_out)))) + "\n")
+        # with open("discriminator_layer_output_mags_" + str(iterations) + ".txt", "w") as f:
+        #     for i, disc_call in enumerate(layer_outs):
+        #         f.write("discriminator call #" + str(i) + "\n\n\n")
+        #         for j, layer_out in enumerate(disc_call):
+        #             f.write("layer " + str(j) + "\n")
+        #             f.write(str(np.sqrt(np.sum(np.square(layer_out)))) + "\n")
 
-        with open("discriminator_layer_outputs_" + str(iterations) + ".txt", "w") as f:
-            for i, disc_call in enumerate(layer_outs):
-                f.write("discriminator call #" + str(i) + "\n\n\n")
-                for j, layer_out in enumerate(disc_call):
-                    f.write("layer " + str(j) + "\n")
-                    f.write(str(layer_out) + "\n")
+        # with open("discriminator_layer_outputs_" + str(iterations) + ".txt", "w") as f:
+        #     for i, disc_call in enumerate(layer_outs):
+        #         f.write("discriminator call #" + str(i) + "\n\n\n")
+        #         for j, layer_out in enumerate(disc_call):
+        #             f.write("layer " + str(j) + "\n")
+        #             f.write(str(layer_out) + "\n")
 
-        with open("discriminator_weights_" + str(iterations) + ".txt", "w") as f:
-            for w, n in zip(weights, disc_weight_names):
-                f.write(n + "\n\n" + str(w) + "\n")
+        # with open("discriminator_weights_" + str(iterations) + ".txt", "w") as f:
+        #     for w, n in zip(weights, disc_weight_names):
+        #         f.write(n + "\n\n" + str(w) + "\n")
 
         # img_gen_start_time = time.time()
         # raw_generated_images = sess.run(s.generator_out)
