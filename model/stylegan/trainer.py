@@ -90,9 +90,13 @@ def main(argv):
       num_iterations += 1
 
       if (num_iterations % args.n_critic) == 0:
-         gen_loss, gen_images = model.trainGeneratorBatch()
+         gen_start_time = time.time()
+         gen_loss = model.trainGeneratorBatch()
+         print("Generator loss:", gen_loss)
+         print("Generator train time:", time.time() - gen_start_time)
 
       if (num_iterations % 10*args.n_critic) == 0:
+         gen_start_time = time.time()
          gen_images = model.runGeneratorBatch()
          for i in range(min(gen_images.shape[0], 5)):
             plt.figure()
@@ -103,6 +107,7 @@ def main(argv):
             )
             plt.savefig(save_filename)
             plt.close()
+         print("\nGenerated some images! Took", time.time() - gen_start_time, "seconds.\n")
 
       if (num_iterations % args.save_frequency) == 0:
          model.saveParams(args.outdir, num_iterations)

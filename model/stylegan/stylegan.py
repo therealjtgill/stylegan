@@ -36,13 +36,13 @@ class stylegan(object):
             (128, 64, 256)
         ]
         self.disc_config = [
-            (256, 16)
+            (256, 16),
             (16, 32),
             (32, 64),
             (64, 128),
             (128, 256),
             (256, 256),
-            (256, 256),
+            (256, 256)
         ]
         if gen_config is not None:
             self.gen_config = gen_config
@@ -180,7 +180,7 @@ class stylegan(object):
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.0, beta2=0.99, epsilon=1e-8
+            learning_rate=0.0001, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -465,7 +465,7 @@ class stylegan(object):
 
             res = from_rgb
             var_id = 1
-            for c_in, c_out, k in config[1:]:
+            for c_in, c_out in config[1:]:
                 downsample = self.downsample(res, c_in, c_out, id=var_id)
                 disc_block = self.discriminatorBlock(
                     res,
@@ -489,7 +489,6 @@ class stylegan(object):
                 tf.nn.conv2d(res, conv_w_a, padding="SAME"),
                 alpha=0.2
             )
-            disc_layer_outputs.append(conv_out_1)
             
             conv_w_b = tf.get_variable(
                 "conv_w_disc_end_4x4",
@@ -503,7 +502,6 @@ class stylegan(object):
                 tf.nn.conv2d(conv_out_1, conv_w_b, padding="VALID"),
                 alpha=0.2
             )
-            disc_layer_outputs.append(conv_out_2)
 
             batch_size = tf.shape(conv_out_2)[0]
             
