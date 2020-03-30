@@ -175,6 +175,9 @@ class stylegan(object):
             self.mapper_loss,
             var_list=tf.trainable_variables(scope="mapper")
         )
+
+        self.sess.run(tf.global_variables_initializer())
+        self.saver = tf.train.Saver(max_to_keep=5)
         
     def latentZMapper(self, Z_in, depth=8, reuse=False):
         result = None
@@ -230,7 +233,7 @@ class stylegan(object):
 
             c_in, c_out, k = config[0]
             block_input = tiled_constant_input
-            block_1 = None
+            #block_1 = None
             block_2 = self.styleBlock(
                 block_input,
                 W_in,
@@ -263,6 +266,10 @@ class stylegan(object):
                 
             c_in, c_out, k = config[-1]
             rgb_out = tf.nn.tanh(to_rgb)
+
+            if rgb_out is None:
+                print("rgb_out is none!")
+                sys.exit(-1)
 
             return rgb_out
         
@@ -759,126 +766,133 @@ class stylegan(object):
         return gen_loss, gen_out
 
     def runGeneratorBatch(self):
-        raw_generated_images = self.sess.run(self.generator_out)
+        gen_out = self.sess.run(self.generator_out)
+
+        return gen_out
+
+    def saveParams(self, save_dir, global_step):
+        
+        self.saver.save(self.session, save_dir, global_step=global_step)
 
 
 # In[3]:
 
-batch_size = 8
-sess = tf.Session()
+if __name__ == "__main__":
+    batch_size = 8
+    sess = tf.Session()
 
-s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
-sess.run(tf.global_variables_initializer())
-print("Initialized variables")
-saver = tf.train.Saver(max_to_keep=3)
-print("Initialized saver")
+    s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
+    sess.run(tf.global_variables_initializer())
+    print("Initialized variables")
+    saver = tf.train.Saver(max_to_keep=3)
+    print("Initialized saver")
 
-# print("tensorflow variables:")
-# sorted_varnames = sorted([v.name for v in tf.global_variables()])
-# for var in sorted_varnames:
-#     print(var)
-# sys.exit(-1)
+    # print("tensorflow variables:")
+    # sorted_varnames = sorted([v.name for v in tf.global_variables()])
+    # for var in sorted_varnames:
+    #     print(var)
+    # sys.exit(-1)
 
-# In[ ]:
+    # In[ ]:
 
-print("Defining generators")
-gan_data_generator = ImageDataGenerator(
-    rescale=1,
-    preprocessing_function=scale_and_shift_pixels,
-    horizontal_flip=True,
-)
+    print("Defining generators")
+    gan_data_generator = ImageDataGenerator(
+        rescale=1,
+        preprocessing_function=scale_and_shift_pixels,
+        horizontal_flip=True,
+    )
 
-data_flow = gan_data_generator.flow_from_directory(
-    '/home/jg/Documents/stylegan/ffhq-dataset/thisfolderisjustforkeras',
-    target_size=(256, 256),
-    batch_size=batch_size,
-    shuffle=True
-)
-print("Initialized generators")
-train = True
+    data_flow = gan_data_generator.flow_from_directory(
+        '/home/jg/Documents/stylegan/ffhq-dataset/thisfolderisjustforkeras',
+        target_size=(256, 256),
+        batch_size=batch_size,
+        shuffle=True
+    )
+    print("Initialized generators")
+    train = True
 
-num_images = 0
-num_epochs = 0
-disc_losses = [-1,]
-gen_losses = [-1,]
-iterations = 0
-start = time.time()
+    num_images = 0
+    num_epochs = 0
+    disc_losses = [-1,]
+    gen_losses = [-1,]
+    iterations = 0
+    start = time.time()
 
-losses_filename = "losses.dat"
-losses_file = open(losses_filename, "w")
+    losses_filename = "losses.dat"
+    losses_file = open(losses_filename, "w")
 
-#saver.save(sess, "stylegan2_ckpt", global_step=123456)
-summary_writer = tf.summary.FileWriter("logs", sess.graph)
+    #saver.save(sess, "stylegan2_ckpt", global_step=123456)
+    summary_writer = tf.summary.FileWriter("logs", sess.graph)
 
-if train:
-    for x, _ in data_flow:
-        if iterations == 4:
-            break
-        print("min, max of training image:", np.min(x[0, :, :, :]), np.max(x[0, :, :, :]))
+    if train:
+        for x, _ in data_flow:
+            if iterations == 4:
+                break
+            print("min, max of training image:", np.min(x[0, :, :, :]), np.max(x[0, :, :, :]))
 
-        disc_start_time = time.time()
-        if num_epochs == 20:
-            break
-        if x.shape[0] != batch_size:
-            num_epochs += 1
-            continue
+            disc_start_time = time.time()
+            if num_epochs == 20:
+                break
+            if x.shape[0] != batch_size:
+                num_epochs += 1
+                continue
 
-        loss, fake_pred, real_pred = s.trainDiscriminatorBatch(x)
+            loss, fake_pred, real_pred = s.trainDiscriminatorBatch(x)
 
-        disc_losses.append(loss)
-        print("discriminator run/loss time:", time.time() - disc_start_time)
-        print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
+            disc_losses.append(loss)
+            print("discriminator run/loss time:", time.time() - disc_start_time)
+            print("Real prediction:", real_pred, " Fake prediction: ", fake_pred)
 
-        # disc_weight_names = [w.name for w in tf.trainable_variables(scope="discriminator")]
-        # weights = sess.run(disc_weight_names)
+            # disc_weight_names = [w.name for w in tf.trainable_variables(scope="discriminator")]
+            # weights = sess.run(disc_weight_names)
 
-        # with open("discriminator_layer_output_mags_" + str(iterations) + ".txt", "w") as f:
-        #     for i, disc_call in enumerate(layer_outs):
-        #         f.write("discriminator call #" + str(i) + "\n\n\n")
-        #         for j, layer_out in enumerate(disc_call):
-        #             f.write("layer " + str(j) + "\n")
-        #             f.write(str(np.sqrt(np.sum(np.square(layer_out)))) + "\n")
+            # with open("discriminator_layer_output_mags_" + str(iterations) + ".txt", "w") as f:
+            #     for i, disc_call in enumerate(layer_outs):
+            #         f.write("discriminator call #" + str(i) + "\n\n\n")
+            #         for j, layer_out in enumerate(disc_call):
+            #             f.write("layer " + str(j) + "\n")
+            #             f.write(str(np.sqrt(np.sum(np.square(layer_out)))) + "\n")
 
-        # with open("discriminator_layer_outputs_" + str(iterations) + ".txt", "w") as f:
-        #     for i, disc_call in enumerate(layer_outs):
-        #         f.write("discriminator call #" + str(i) + "\n\n\n")
-        #         for j, layer_out in enumerate(disc_call):
-        #             f.write("layer " + str(j) + "\n")
-        #             f.write(str(layer_out) + "\n")
+            # with open("discriminator_layer_outputs_" + str(iterations) + ".txt", "w") as f:
+            #     for i, disc_call in enumerate(layer_outs):
+            #         f.write("discriminator call #" + str(i) + "\n\n\n")
+            #         for j, layer_out in enumerate(disc_call):
+            #             f.write("layer " + str(j) + "\n")
+            #             f.write(str(layer_out) + "\n")
 
-        # with open("discriminator_weights_" + str(iterations) + ".txt", "w") as f:
-        #     for w, n in zip(weights, disc_weight_names):
-        #         f.write(n + "\n\n" + str(w) + "\n")
+            # with open("discriminator_weights_" + str(iterations) + ".txt", "w") as f:
+            #     for w, n in zip(weights, disc_weight_names):
+            #         f.write(n + "\n\n" + str(w) + "\n")
 
-        # img_gen_start_time = time.time()
-        # raw_generated_images = s.runGeneratorBatch()
+            # img_gen_start_time = time.time()
+            # raw_generated_images = s.runGeneratorBatch()
 
-        # for i in range(min(raw_generated_images.shape[0], 5)):
-        #     plt.figure()
-        #     plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
-        #     print((raw_generated_images[i, :, :, :] + 1.)/2.)
-        #     plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
-        #     plt.close()
+            # for i in range(min(raw_generated_images.shape[0], 5)):
+            #     plt.figure()
+            #     plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
+            #     print((raw_generated_images[i, :, :, :] + 1.)/2.)
+            #     plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
+            #     plt.close()
 
-        # print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
+            # print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
 
-        iterations += 1
+            iterations += 1
 
-        if iterations % 5 == 0:
-            img_gen_start_time = time.time()
-            gen_loss, raw_generated_images = s.trainGeneratorBatch()
-            gen_losses.append(gen_loss)
+            if iterations % 5 == 0:
+                img_gen_start_time = time.time()
+                gen_loss, raw_generated_images = s.trainGeneratorBatch()
+                gen_losses.append(gen_loss)
 
-            for i in range(min(raw_generated_images.shape[0], 5)):
-                plt.figure()
-                plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
-                #print((raw_generated_images[i, :, :, :] + 1.)/2.)
-                plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
-                plt.close()
+                for i in range(min(raw_generated_images.shape[0], 5)):
+                    plt.figure()
+                    plt.imshow(np.array((raw_generated_images[i, :, :, :] + 1.)/2.))
+                    #print((raw_generated_images[i, :, :, :] + 1.)/2.)
+                    plt.savefig('generated_image_' + str(iterations) + '_' + str(i) + '.png')
+                    plt.close()
 
-            print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
+                print("Took ", (time.time() - img_gen_start_time), " seconds to generate/save those images")
 
-        #iterations += 1
-        losses_file.write(str(iterations) + " " + str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\n")
-        print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
-        start = time.time()
+            #iterations += 1
+            losses_file.write(str(iterations) + " " + str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\n")
+            print("num iterations:", iterations, "disc loss:", disc_losses[-1], "gen loss:", gen_losses[-1], "time elapsed:", time.time() - start)
+            start = time.time()
