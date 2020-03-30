@@ -2,3 +2,4 @@ ffhq-dataset
 model/wgan-gp/.ipynb_checkpoints*
 *pycache*
 *.ipynb_checkpoints*
+*.png

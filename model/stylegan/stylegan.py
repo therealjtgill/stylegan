@@ -18,7 +18,7 @@ from keras.preprocessing.image import ImageDataGenerator
 # In[2]:
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True, config=None):
+    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True, disc_config=None, gen_config=None):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
@@ -26,7 +26,7 @@ class stylegan(object):
         self.batch_size = batch_size
         self.gamma = gamma
         
-        self.config = [
+        self.gen_config = [
             (256, 256, 4),
             (256, 256, 8),
             (256, 256, 16),
@@ -35,8 +35,19 @@ class stylegan(object):
             (256, 128, 128),
             (128, 64, 256)
         ]
-        if config is not None:
-            self.config = config
+        self.disc_config = [
+            (256, 16)
+            (16, 32),
+            (32, 64),
+            (64, 128),
+            (128, 256),
+            (256, 256),
+            (256, 256),
+        ]
+        if gen_config is not None:
+            self.gen_config = gen_config
+        if disc_config is not None:
+            self.disc_config = disc_config
 
         self.disc_layer_outputs = []
         
@@ -65,7 +76,7 @@ class stylegan(object):
         self.latent_w = self.latentZMapper(self.latent_z)
         
         #self.generator_out = self.evalGenerator(self.latent_w)
-        self.generator_out = self.evalGeneratorLoop(self.latent_w, self.config)
+        self.generator_out = self.evalGeneratorLoop(self.latent_w, self.gen_config)
         
         # e = tf.random.uniform(
         #     shape=[self.batch_size], minval=0., maxval=1., dtype=tf.float32
@@ -78,9 +89,19 @@ class stylegan(object):
         #     tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
         # )
         
-        self.disc_of_gen_out = self.evalDiscriminator(self.generator_out, False)
+        #self.disc_of_gen_out = self.evalDiscriminator(self.generator_out, False)
+        self.disc_of_gen_out = self.evalDiscriminatorLoop(
+            self.generator_out,
+            False,
+            self.disc_config
+        )
         #self.disc_of_gen_out = self.evalDiscriminator(self.fake_images_ph, False)
-        self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph, True)
+        #self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph, True)
+        self.disc_of_truth_out = self.evalDiscriminatorLoop(
+            self.true_images_ph,
+            True,
+            self.disc_config
+        )
         #self.disc_of_interp_out = self.evalDiscriminator(self.interp_images, True)
         
         self.r1_reg = 0.0
@@ -123,7 +144,7 @@ class stylegan(object):
         self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.000025, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(
@@ -159,7 +180,7 @@ class stylegan(object):
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00005, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -434,6 +455,80 @@ class stylegan(object):
             
             return to_rgb_7
             
+    def evalDiscriminatorLoop(self, rgb_in, reuse, config):
+        with tf.variable_scope("discriminator", reuse=reuse) as vs:
+            from_rgb_k, from_rgb_c_out = config[0]
+
+            from_rgb = self.fromRgb(
+                rgb_in, from_rgb_k, from_rgb_k, from_rgb_c_out, id=1
+            )
+
+            res = from_rgb
+            var_id = 1
+            for c_in, c_out, k in config[1:]:
+                downsample = self.downsample(res, c_in, c_out, id=var_id)
+                disc_block = self.discriminatorBlock(
+                    res,
+                    c_in,
+                    c_out,
+                    id=var_id
+                )
+                res = downsample + disc_block
+                var_id += 1
+
+            c_in, c_out = config[-1]
+            conv_w_a = tf.get_variable(
+                "conv_w_disc_end_3x3",
+                [3, 3, c_in, c_out],
+                initializer=tf.contrib.layers.variance_scaling_initializer(
+                    dtype=tf.float32
+                )
+            )
+            
+            conv_out_1 = tf.nn.leaky_relu(
+                tf.nn.conv2d(res, conv_w_a, padding="SAME"),
+                alpha=0.2
+            )
+            disc_layer_outputs.append(conv_out_1)
+            
+            conv_w_b = tf.get_variable(
+                "conv_w_disc_end_4x4",
+                [4, 4, c_in, c_out],
+                initializer=tf.contrib.layers.variance_scaling_initializer(
+                    dtype=tf.float32
+                )
+            )
+            
+            conv_out_2 = tf.nn.leaky_relu(
+                tf.nn.conv2d(conv_out_1, conv_w_b, padding="VALID"),
+                alpha=0.2
+            )
+            disc_layer_outputs.append(conv_out_2)
+
+            batch_size = tf.shape(conv_out_2)[0]
+            
+            conv_outputs_flat = tf.reshape(conv_out_2, shape=[batch_size, -1])
+            
+            W_fc = tf.get_variable(
+                "fully_connected_W_disc_end",
+                [c_out, 1],
+                initializer=tf.contrib.layers.variance_scaling_initializer(
+                    dtype=tf.float32
+                )
+            )
+
+            b_fc = tf.get_variable(
+                "fully_connected_b_disc_end",
+                [1],
+                initializer=tf.initializers.random_normal(0, 0.4)
+            )
+
+            disc_out = tf.nn.sigmoid(
+                tf.matmul(conv_outputs_flat, W_fc) + b_fc
+            )
+
+            return disc_out
+
     def evalDiscriminator(self, rgb_in, reuse):
         with tf.variable_scope("discriminator", reuse=reuse) as vs:
             disc_layer_outputs = []
@@ -559,14 +654,16 @@ class stylegan(object):
             return disc_out
             
     def discriminatorBlock(self, V_in, num_input_channels, num_output_channels, downsample=True, id=0):
-        # V_in        --> [batch_size, height, width, num_input_channels]
+        # V_in        --> [batch_size, height, width, c_in]
         # latent_w    --> [batch_size, 512]
-        #    num_input_channels  = number of input feature maps
+        #    c_in  = number of input feature maps
         #    num_output_channels = number of output feature maps
-        
+        c_in = num_input_channels
+        c_out = num_output_channels
+
         conv_weight_a = tf.get_variable(
             "conv_w_disc_a_" + str(id),
-            [3, 3, num_input_channels, num_input_channels],
+            [3, 3, c_in, c_in],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
@@ -577,7 +674,7 @@ class stylegan(object):
         
         conv_weight_b = tf.get_variable(
             "conv_w_disc_b_" + str(id),
-            [3, 3, num_input_channels, num_output_channels],
+            [3, 3, c_in, c_out],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
@@ -586,7 +683,8 @@ class stylegan(object):
             alpha=0.2
         )
         
-        V_out = self.downsample(V_out_b, num_output_channels, num_output_channels, id+100)
+        # Bad ID deconfliction - assumes that regular ID's will never exceed 100.
+        V_out = self.downsample(V_out_b, c_out, c_out, id+100)
         
         return V_out
             
@@ -596,28 +694,27 @@ class stylegan(object):
         #    num_input_channels  = number of input feature maps
         #    num_output_channels = number of output feature maps
         self.num_style_blocks += 1
+        c_in = num_input_channels
+        c_out = num_output_channels
         
         if upsample:
             V_in = self.upsample(V_in)
         
         A = tf.get_variable(
             "A_style" + str(self.num_style_blocks),
-            [256, num_input_channels],
-            #[512, num_output_channels],
-            #initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            [256, c_in],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
         conv_weight = tf.get_variable(
             "conv_w_style" + str(self.num_style_blocks),
-            [3, 3, num_input_channels, num_output_channels],
-            #initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            [3, 3, c_in, c_out],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
         conv_bias = tf.get_variable(
             "conv_b_style" + str(self.num_style_blocks),
-            [1, fm_dimension, fm_dimension, num_output_channels],
+            [1, fm_dimension, fm_dimension, c_out],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
@@ -625,27 +722,15 @@ class stylegan(object):
         scale = tf.matmul(latent_w, A)
         
         # Scale input feature map acros input channels by the affine transformation
-        # of the latent space input.
-        #print("##########")
-        #print("scale input feature map")
-        #print("scale", scale)
-        #print("V_in", V_in)
         V_in_scaled = tf.einsum("bi,bhwi->bhwi", scale, V_in)
         
         V_out = tf.nn.conv2d(V_in_scaled, conv_weight, padding="SAME")
-        #print("V_out:", V_out)
+
         # This increases the number of weights by a factor of batch_size,
         # which is weird.
-        #print("calculate sigma_j")
-        #print("scale", scale)
-        #print("conv_weight", conv_weight)
-        #modul_conv_weight = tf.einsum("bc,hwjc->bhwjc", scale, conv_weight)
         modul_conv_weight = tf.einsum("bj,hwjc->bhwjc", scale, conv_weight)
         sigma_j = 1./tf.sqrt(tf.reduce_sum(tf.square(modul_conv_weight), axis=[1, 2, 3]) + 1e-6)
 
-        #print("calculate output")
-        #print("V_in_scaled", V_in_scaled)
-        #print("sigma_j", sigma_j)
         # Need to add biases and broadcast noise.
         V_out_scaled = tf.nn.leaky_relu(
             tf.einsum("bhwj,bj->bhwj", V_out, sigma_j) + conv_bias,
@@ -674,19 +759,21 @@ class stylegan(object):
         V_out = tf.image.resize_bilinear(V_in, (2*h, 2*w))
         return V_out
     
-    def downsample(self, V_in, input_channels, output_channels=None, id=0):
-        
+    def downsample(self, V_in, num_input_channels, num_output_channels=None, id=0):
+        c_in = num_input_channels
+        c_out = num_output_channels
+
         V_in_shape = tf.shape(V_in)
         h = V_in_shape[1]
         w = V_in_shape[2]
         V_larger = V_in
-        if output_channels is None:
-            output_channels = 2*input_channels
+        if c_out is None:
+            c_out = 2*c_in
     
-        if output_channels != input_channels:
+        if c_out != c_in:
             channel_increase = tf.get_variable(
                 "channel_increaser" + str(id),
-                [1, 1, input_channels, output_channels]
+                [1, 1, c_in, c_out]
             )
             
             V_larger = tf.nn.leaky_relu(
@@ -758,12 +845,11 @@ class stylegan(object):
             self.gan_gen_loss,
             self.gen_minimize,
             self.mapper_minimize,
-            self.generator_out
         ]
 
-        gen_loss, _1, _2, gen_out = self.sess.run(fetches, feed_dict={})
+        gen_loss, _1, _2 = self.sess.run(fetches, feed_dict={})
 
-        return gen_loss, gen_out
+        return gen_loss
 
     def runGeneratorBatch(self):
         gen_out = self.sess.run(self.generator_out)
@@ -772,7 +858,7 @@ class stylegan(object):
 
     def saveParams(self, save_dir, global_step):
         
-        self.saver.save(self.session, save_dir, global_step=global_step)
+        self.saver.save(self.sess, save_dir, global_step=global_step)
 
 
 # In[3]:
@@ -880,7 +966,7 @@ if __name__ == "__main__":
 
             if iterations % 5 == 0:
                 img_gen_start_time = time.time()
-                gen_loss, raw_generated_images = s.trainGeneratorBatch()
+                gen_loss = s.trainGeneratorBatch()
                 gen_losses.append(gen_loss)
 
                 for i in range(min(raw_generated_images.shape[0], 5)):

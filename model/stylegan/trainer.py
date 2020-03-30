@@ -41,13 +41,15 @@ def main(argv):
    parser.add_argument("--n_critic",
       help     = "The number of times to run the critic per minibatch.",
       required = False,
-      default  = 3
+      default  = 3,
+      type     = int
    )
 
    parser.add_argument("--save_frequency",
       help     = "The number of iterations between saving checkpoints.",
       required = False,
-      default  = 360 # Every 6 hours on GTX 1080 TI
+      default  = 360, # Roughly every 6 hours on GTX 1080 TI
+      type     = int
    )
 
    args = parser.parse_args()
@@ -89,8 +91,9 @@ def main(argv):
 
       if (num_iterations % args.n_critic) == 0:
          gen_loss, gen_images = model.trainGeneratorBatch()
-         gen_losses.append(gen_loss)
 
+      if (num_iterations % 10*args.n_critic) == 0:
+         gen_images = model.runGeneratorBatch()
          for i in range(min(gen_images.shape[0], 5)):
             plt.figure()
             plt.imshow(np.array((gen_images[i, :, :, :] + 1.)/2.))
