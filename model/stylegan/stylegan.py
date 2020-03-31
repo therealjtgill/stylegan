@@ -18,7 +18,7 @@ from keras.preprocessing.image import ImageDataGenerator
 # In[2]:
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=1, use_r1_reg=True, disc_config=None, gen_config=None):
+    def __init__(self, session, batch_size=64, output_resolution=256, gamma=10, use_r1_reg=True, disc_config=None, gen_config=None):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
@@ -44,6 +44,7 @@ class stylegan(object):
             (256, 256),
             (256, 256)
         ]
+
         if gen_config is not None:
             self.gen_config = gen_config
         if disc_config is not None:
@@ -78,16 +79,16 @@ class stylegan(object):
         #self.generator_out = self.evalGenerator(self.latent_w)
         self.generator_out = self.evalGeneratorLoop(self.latent_w, self.gen_config)
         
-        # e = tf.random.uniform(
-        #     shape=[self.batch_size], minval=0., maxval=1., dtype=tf.float32
-        # )
-        
         print(self.generator_out)
         
-        # self.interp_images = tf.add(
-        #     tf.einsum("b,bhwc->bhwc", e, self.generator_out),
-        #     tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
-        # )
+        e = tf.random.uniform(
+            shape=[self.batch_size], minval=0., maxval=1., dtype=tf.float32
+        )
+
+        self.interp_images = tf.add(
+            tf.einsum("b,bhwc->bhwc", e, self.generator_out),
+            tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
+        )
         
         #self.disc_of_gen_out = self.evalDiscriminator(self.generator_out, False)
         self.disc_of_gen_out = self.evalDiscriminatorLoop(
@@ -95,56 +96,61 @@ class stylegan(object):
             False,
             self.disc_config
         )
-        #self.disc_of_gen_out = self.evalDiscriminator(self.fake_images_ph, False)
+
         #self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph, True)
         self.disc_of_truth_out = self.evalDiscriminatorLoop(
             self.true_images_ph,
             True,
             self.disc_config
         )
-        #self.disc_of_interp_out = self.evalDiscriminator(self.interp_images, True)
-        
-        self.r1_reg = 0.0
-        if use_r1_reg:
-            disc_grad_truth = tf.gradients(
-                self.disc_of_truth_out,
-                [self.true_images_ph]
-            )[0]
-            
-            self.r1_reg = (self.gamma/2)*tf.reduce_sum(
-                tf.square(disc_grad_truth),
-                axis=[1, 2, 3]
-            )
-        
-        #disc_grad_interp = tf.gradients(
-        #    self.disc_of_interp_out,
-        #    [self.interp_images]
-        #)[0]
-
-        #self.lipschitz_penalty = tf.reduce_mean(
-        #    tf.square(
-        #        tf.sqrt(
-        #            tf.reduce_sum(
-        #                disc_grad_interp*disc_grad_interp, axis=[1, 2, 3]
-        #            )
-        #        ) - 1.
-        #    )
-        #)
-
-        # self.wgan_disc_loss = tf.reduce_mean(
-        #     self.disc_of_gen_out - self.disc_of_truth_out
-        # )
-        
-        self.gan_disc_loss = tf.add(
-            tf.reduce_mean(-tf.log(tf.maximum(self.disc_of_truth_out, 1e-6))),    
-            tf.reduce_mean(-tf.log(tf.maximum(1. - self.disc_of_gen_out, 1e-6)))
+        self.disc_of_interp_out = self.evalDiscriminatorLoop(
+            self.interp_images,
+            True,
+            self.disc_config
         )
         
-        #self.disc_loss = self.wgan_disc_loss# + self.lipschitz_penalty
-        self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
+        disc_grad_interp = tf.gradients(
+           self.disc_of_interp_out,
+           [self.interp_images]
+        )[0]
+
+        self.lipschitz_penalty = tf.reduce_mean(
+           tf.square(
+               tf.sqrt(
+                   tf.reduce_sum(
+                       disc_grad_interp*disc_grad_interp, axis=[1, 2, 3]
+                   )
+               ) - 1.
+           )
+        )
+
+        self.wgan_disc_loss = tf.reduce_mean(
+            self.disc_of_gen_out - self.disc_of_truth_out
+        )
+
+        self.disc_loss = self.wgan_disc_loss + self.lipschitz_penalty
+        
+        # self.r1_reg = 0.0
+        # if use_r1_reg:
+        #     disc_grad_truth = tf.gradients(
+        #         self.disc_of_truth_out,
+        #         [self.true_images_ph]
+        #     )[0]
+            
+        #     self.r1_reg = (self.gamma/2)*tf.reduce_sum(
+        #         tf.square(disc_grad_truth),
+        #         axis=[1, 2, 3]
+        #     )
+
+        # self.gan_disc_loss = tf.add(
+        #     tf.reduce_mean(-tf.log(tf.maximum(self.disc_of_truth_out, 1e-6))),    
+        #     tf.reduce_mean(-tf.log(tf.maximum(1. - self.disc_of_gen_out, 1e-6)))
+        # )
+        
+        # self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.000025, beta1=0.0, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00005, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(
@@ -180,7 +186,7 @@ class stylegan(object):
         )
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.0001, beta1=0.0, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00025, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -521,9 +527,10 @@ class stylegan(object):
                 initializer=tf.initializers.random_normal(0, 0.4)
             )
 
-            disc_out = tf.nn.sigmoid(
-                tf.matmul(conv_outputs_flat, W_fc) + b_fc
-            )
+            #disc_out = tf.nn.sigmoid(
+            #    tf.matmul(conv_outputs_flat, W_fc) + b_fc
+            #)
+            disc_out = tf.matmul(conv_outputs_flat, W_fc) + b_fc
 
             return disc_out
 
@@ -865,7 +872,7 @@ if __name__ == "__main__":
     batch_size = 8
     sess = tf.Session()
 
-    s = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
+    s = stylegan(sess, gamma=5, batch_size=batch_size, use_r1_reg=True)
     sess.run(tf.global_variables_initializer())
     print("Initialized variables")
     saver = tf.train.Saver(max_to_keep=3)
