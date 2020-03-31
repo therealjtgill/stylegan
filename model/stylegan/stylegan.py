@@ -114,7 +114,7 @@ class stylegan(object):
            [self.interp_images]
         )[0]
 
-        self.lipschitz_penalty = tf.reduce_mean(
+        self.lipschitz_penalty = 10.*tf.reduce_mean(
            tf.square(
                tf.sqrt(
                    tf.reduce_sum(
@@ -179,22 +179,24 @@ class stylegan(object):
         #     tf.sqrt(tf.reduce_sum(tf.square(g))) for g, v in capped_grads
         # ]
 
-        #self.wgan_gen_loss = tf.reduce_mean(-self.disc_of_gen_out)
+        self.wgan_gen_loss = tf.reduce_mean(-self.disc_of_gen_out)
 
-        self.gan_gen_loss = tf.reduce_mean(
-            -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
-        )
+        # self.gan_gen_loss = tf.reduce_mean(
+        #     -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
+        # )
+        
+        self.gen_loss = self.wgan_gen_loss
 
         self.gen_optimizer = tf.train.AdamOptimizer(
             learning_rate=0.00025, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
-            self.gan_gen_loss,
+            self.gen_loss,
             var_list=tf.trainable_variables(scope="generator")
         )
 
-        self.mapper_loss = self.gan_gen_loss
+        self.mapper_loss = self.gen_loss
         self.mapper_optimizer = tf.train.AdamOptimizer(
             learning_rate=0.01*0.002, beta1=0.9, beta2=0.9
         )
