@@ -849,7 +849,7 @@ class stylegan(object):
 
     def trainGeneratorBatch(self):
         fetches = [
-            self.gan_gen_loss,
+            self.gen_loss,
             self.gen_minimize,
             self.mapper_minimize,
         ]
