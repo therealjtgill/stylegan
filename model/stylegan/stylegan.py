@@ -185,7 +185,33 @@ class stylegan(object):
         #     -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
         # )
         
-        self.gen_loss = self.wgan_gen_loss
+        gen_grad_w = tf.gradients(
+            tf.reduce_sum(
+                self.generator_out*tf.random_normal(
+                    shape=tf.shape(self.generator_out),
+                    dtype=tf.float32
+                )
+            ),
+            [self.latent_w]
+        )[0]
+
+        self.gen_grad_w_mag = tf.sqrt(
+            tf.reduce_sum(
+                tf.square(gen_grad_w)
+            )
+        )
+
+        ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        m = ema.apply([self.gen_grad_w_mag])
+        self.gen_a = ema.average(self.gen_grad_w_mag)
+
+        self.gen_path_len_reg = tf.reduce_mean(
+            tf.square(
+                self.gen_grad_w_mag - self.gen_a
+            )
+        )
+
+        self.gen_loss = self.wgan_gen_loss + self.gen_path_len_reg
 
         self.gen_optimizer = tf.train.AdamOptimizer(
             learning_rate=0.00025, beta1=0.1, beta2=0.99, epsilon=1e-8
@@ -215,7 +241,9 @@ class stylegan(object):
                 W = tf.get_variable(
                     "W_mapper_" + str(i),
                     [256, 256],
-                    initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+                    initializer=tf.contrib.layers.variance_scaling_initializer(
+                        dtype=tf.float32
+                    )
                 )
                 b = tf.get_variable(
                     "b_mapper_" + str(i),
@@ -248,7 +276,9 @@ class stylegan(object):
             self.constant_input = tf.get_variable(
                 "c_1",
                 [4, 4, 256],
-                initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+                initializer=tf.contrib.layers.variance_scaling_initializer(
+                    dtype=tf.float32
+                )
             )
             
             tiled_constant_input = tf.tile(
