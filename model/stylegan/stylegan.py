@@ -9,7 +9,8 @@ import numpy as np
 import sys
 import tensorflow as tf
 import time
-from utils import scale_and_shift_pixels
+#from utils import scale_and_shift_pixels
+import utils
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -18,7 +19,7 @@ from keras.preprocessing.image import ImageDataGenerator
 # In[2]:
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=10, use_r1_reg=True, disc_config=None, gen_config=None):
+    def __init__(self, session, batch_size=64, output_resolution=256, gamma=10, use_r1_reg=True, use_pl_reg=True, disc_config=None, gen_config=None):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
@@ -28,11 +29,11 @@ class stylegan(object):
         
         self.gen_config = [
             (256, 256, 4),
-            (256, 256, 8),
-            (256, 256, 16),
-            (256, 256, 32),
-            (256, 256, 64),
-            (256, 128, 128),
+            (256, 128, 8),
+            (128, 128, 16),
+            (128, 128, 32),
+            (128, 128, 64),
+            (128, 128, 128),
             (128, 64, 256)
         ]
         self.disc_config = [
@@ -40,9 +41,9 @@ class stylegan(object):
             (16, 32),
             (32, 64),
             (64, 128),
-            (128, 256),
-            (256, 256),
-            (256, 256)
+            (128, 128),
+            (128, 128),
+            (128, 128)
         ]
 
         if gen_config is not None:
@@ -90,14 +91,12 @@ class stylegan(object):
             tf.einsum("b,bhwc->bhwc", (1. - e), self.true_images_ph)
         )
         
-        #self.disc_of_gen_out = self.evalDiscriminator(self.generator_out, False)
         self.disc_of_gen_out = self.evalDiscriminatorLoop(
             self.generator_out,
             False,
             self.disc_config
         )
 
-        #self.disc_of_truth_out = self.evalDiscriminator(self.true_images_ph, True)
         self.disc_of_truth_out = self.evalDiscriminatorLoop(
             self.true_images_ph,
             True,
@@ -185,31 +184,33 @@ class stylegan(object):
         #     -tf.log(tf.maximum(self.disc_of_gen_out, 1e-6))
         # )
         
-        gen_grad_w = tf.gradients(
-            tf.reduce_sum(
-                self.generator_out*tf.random_normal(
-                    shape=tf.shape(self.generator_out),
-                    dtype=tf.float32
+        self.gen_path_len_reg = 0.0
+        if use_pl_reg:
+            gen_grad_w = tf.gradients(
+                tf.reduce_sum(
+                    self.generator_out*tf.random_normal(
+                        shape=tf.shape(self.generator_out),
+                        dtype=tf.float32
+                    )
+                ),
+                [self.latent_w]
+            )[0]
+
+            self.gen_grad_w_mag = tf.sqrt(
+                tf.reduce_sum(
+                    tf.square(gen_grad_w)
                 )
-            ),
-            [self.latent_w]
-        )[0]
-
-        self.gen_grad_w_mag = tf.sqrt(
-            tf.reduce_sum(
-                tf.square(gen_grad_w)
             )
-        )
 
-        ema = tf.train.ExponentialMovingAverage(decay=0.9)
-        m = ema.apply([self.gen_grad_w_mag])
-        self.gen_a = ema.average(self.gen_grad_w_mag)
+            ema = tf.train.ExponentialMovingAverage(decay=0.9)
+            m = ema.apply([self.gen_grad_w_mag])
+            self.gen_a = ema.average(self.gen_grad_w_mag)
 
-        self.gen_path_len_reg = tf.reduce_mean(
-            tf.square(
-                self.gen_grad_w_mag - self.gen_a
+            self.gen_path_len_reg = tf.reduce_mean(
+                tf.square(
+                    self.gen_grad_w_mag - self.gen_a
+                )
             )
-        )
 
         self.gen_loss = self.wgan_gen_loss + self.gen_path_len_reg
 
@@ -321,7 +322,7 @@ class stylegan(object):
                     fm_dimension=k
                 )
 
-                to_rgb = self.toRgb(block_2, k, k, c_out) + self.upsample(to_rgb)
+                to_rgb = self.toRgb(block_2, k, k, c_out) + utils.upsample_tf(to_rgb)
                 
             c_in, c_out, k = config[-1]
             rgb_out = tf.nn.tanh(to_rgb)
@@ -450,7 +451,7 @@ class stylegan(object):
         c_out = num_output_channels
         
         if upsample:
-            V_in = self.upsample(V_in)
+            V_in = utils.upsample_tf(V_in)
         
         A = tf.get_variable(
             "A_style" + str(self.num_style_blocks),
@@ -498,17 +499,18 @@ class stylegan(object):
         h = fm_size[1]
         w = fm_size[2]
         c = fm_size[3]
-        # V_in_a = tf.concat([V_in, V_in,], axis=2)
-        # V_in_b = tf.reshape(V_in_a, [b, 2*h, w, c])
-
-        # V_in_c = tf.transpose(V_in_b, perm=[0, 2, 1, 3])
-        # V_in_d = tf.concat([V_in_c, V_in_c], axis=2)
-        # V_out = tf.transpose(
-        #     tf.reshape(V_in_d, [b, 2*h, 2*w, c]),
-        #     perm=[0, 2, 1, 3]
-        # )
         
-        V_out = tf.image.resize_bilinear(V_in, (2*h, 2*w))
+        V_in_a = tf.concat([V_in, V_in,], axis=2)
+        V_in_b = tf.reshape(V_in_a, [b, 2*h, w, c])
+
+        V_in_c = tf.transpose(V_in_b, perm=[0, 2, 1, 3])
+        V_in_d = tf.concat([V_in_c, V_in_c], axis=2)
+        V_out = tf.transpose(
+            tf.reshape(V_in_d, [b, 2*h, 2*w, c]),
+            perm=[0, 2, 1, 3]
+        )
+
+        #V_out = tf.image.resize_bilinear(V_in, (2*h, 2*w))
         return V_out
     
     def downsample(self, V_in, num_input_channels, num_output_channels=None, id=0):
@@ -619,7 +621,7 @@ if __name__ == "__main__":
     batch_size = 8
     sess = tf.Session()
 
-    s = stylegan(sess, gamma=5, batch_size=batch_size, use_r1_reg=True)
+    s = stylegan(sess, gamma=5, batch_size=batch_size, use_r1_reg=True, use_pl_reg=False)
     sess.run(tf.global_variables_initializer())
     print("Initialized variables")
     saver = tf.train.Saver(max_to_keep=3)
@@ -636,7 +638,7 @@ if __name__ == "__main__":
     print("Defining generators")
     gan_data_generator = ImageDataGenerator(
         rescale=1,
-        preprocessing_function=scale_and_shift_pixels,
+        preprocessing_function=utils.scale_and_shift_pixels,
         horizontal_flip=True,
     )
 
