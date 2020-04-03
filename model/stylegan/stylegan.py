@@ -19,7 +19,17 @@ from keras.preprocessing.image import ImageDataGenerator
 # In[2]:
 
 class stylegan(object):
-    def __init__(self, session, batch_size=64, output_resolution=256, gamma=10, use_r1_reg=True, use_pl_reg=True, disc_config=None, gen_config=None):
+    def __init__(
+        self,
+        session,
+        batch_size=8,
+        output_resolution=256,
+        gamma=10,
+        use_r1_reg=True,
+        use_pl_reg=True,
+        disc_config=None,
+        gen_config=None
+    ):
         self.sess = session
         self.output_resolution = output_resolution
         self.num_style_blocks = 0
@@ -77,7 +87,6 @@ class stylegan(object):
 
         self.latent_w = self.latentZMapper(self.latent_z)
         
-        #self.generator_out = self.evalGenerator(self.latent_w)
         self.generator_out = self.evalGeneratorLoop(self.latent_w, self.gen_config)
         
         print(self.generator_out)
