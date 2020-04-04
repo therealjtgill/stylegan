@@ -6,7 +6,8 @@ from stylegan import stylegan
 import sys
 import tensorflow as tf
 import time
-from utils import scale_and_shift_pixels
+#from utils import scale_and_shift_pixels
+import utils
 np.set_printoptions(threshold=sys.maxsize)
 
 #from keras.preprocessing.image import ImageDataGenerator
@@ -58,18 +59,18 @@ def main(argv):
    sess = tf.Session()
    model = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
 
-   gan_data_generator = ImageDataGenerator(
-      rescale=1,
-      preprocessing_function=scale_and_shift_pixels,
-      horizontal_flip=True,
-   )
+   # gan_data_generator = ImageDataGenerator(
+   #    rescale=1,
+   #    preprocessing_function=utils.scale_and_shift_pixels,
+   #    horizontal_flip=True,
+   # )
 
-   data_flow = gan_data_generator.flow_from_directory(
-      args.train_data_dir,
-      target_size=(256, 256),
-      batch_size=batch_size,
-      shuffle=True
-   )
+   # data_flow = gan_data_generator.flow_from_directory(
+   #    args.train_data_dir,
+   #    target_size=(256, 256),
+   #    batch_size=batch_size,
+   #    shuffle=True
+   # )
 
    # training_filenames = os.listdir(args.train_data_dir)
    # dataset = (tf.data.Dataset.from_tensor_slices(training_filenames)
@@ -81,11 +82,18 @@ def main(argv):
 
    # iterator = dataset.make_one_shot_iterator()
 
+   data_flow = utils.JankyImageLoader(
+      dir_to_load=args.train_data_dir,
+      batch_size=8,
+      preprocess=utils.scale_and_shift_pixels
+   )
+
    disc_losses    = []
    gen_losses     = []
    num_epochs     = 0
    num_iterations = 0
-   for x, _ in data_flow:
+   #for x, _ in data_flow:
+   for x in data_flow:
       train_start_time = time.time()
       if x.shape[0] != batch_size:
          num_epochs += 1

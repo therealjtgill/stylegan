@@ -63,7 +63,7 @@ class JankyImageLoader(object):
       return self.num_epochs_elapsed
 
 def scale_and_shift_pixels(image_in):
-   image_out = np.array(2.*image_in/255. - 1, dtype=np.float32)
+   image_out = 2.*np.array(image_in, dtype=np.float32)/255. - 1.
    return image_out
 
 def parse_image_tf(filename):
@@ -188,14 +188,18 @@ if __name__ == "__main__":
    # print(sess.run(tf.gradients(0.5*tf.reduce_sum(b*b), [a])[0]))
 
    import matplotlib.pyplot as plt
-   loader = JankyImageLoader("/home/jg/Documents/stylegan/ffhq-dataset/thisfolderisjustforkeras/images256x256", batch_size=128)
+   loader = JankyImageLoader(
+      "/home/jg/Documents/stylegan/ffhq-dataset/thisfolderisjustforkeras/images256x256",
+      batch_size=128,
+      preprocess=scale_and_shift_pixels
+   )
 
    for j in loader:
       print(j.shape)
       print(loader.num_images_loaded)
       print(loader.epochs)
 
-      # plt.figure()
-      # plt.imshow(j[0, :, :, :])
-      # plt.show()
+      plt.figure()
+      plt.imshow((np.array(j[0, :, :, :], dtype=np.float32) + 1.0)/2.0)
+      plt.show()
       #plt.close()
