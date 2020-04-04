@@ -9,7 +9,7 @@ import time
 from utils import scale_and_shift_pixels
 np.set_printoptions(threshold=sys.maxsize)
 
-from keras.preprocessing.image import ImageDataGenerator
+#from keras.preprocessing.image import ImageDataGenerator
 
 def main(argv):
    parser = argparse.ArgumentParser(
@@ -70,6 +70,16 @@ def main(argv):
       batch_size=batch_size,
       shuffle=True
    )
+
+   # training_filenames = os.listdir(args.train_data_dir)
+   # dataset = (tf.data.Dataset.from_tensor_slices(training_filenames)
+   #    .map(utils.parse_image_tf, num_parallel_calls=1)
+   #    .shuffle(buffer_size=50)
+   #    .batch(batch_size)
+   #    .prefetch(1)
+   # )
+
+   # iterator = dataset.make_one_shot_iterator()
 
    disc_losses    = []
    gen_losses     = []
