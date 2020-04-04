@@ -6,34 +6,44 @@ import tensorflow as tf
 class JankyImageLoader(object):
    def __init__(
       self,
-      dir_to_load,
+      dir_to_load=None,
       batch_size=8,
       preprocess=lambda x: x,
-      num_epochs=1
+      max_num_epochs=1
    ):
       self.dir_to_load = dir_to_load
       self.batch_size = batch_size
       self.preprocess = preprocess
-      self.num_epochs = 1
+      self.max_num_epochs = max_num_epochs
       self.num_epochs_elapsed = 0
       self.image_names = [
-         f for f in os.listdir(self.dir_to_load) if "png" in f
+         os.path.join(dir_to_load, f) for f in os.listdir(dir_to_load)
+         if "png" in f
       ]
       self.resetImageNumbers()
       self.num_images_loaded = 0
       
    def resetImageNumbers(self):
       self.image_numbers = [
-         i for i in range(len(self.image_numbers))
+         i for i in range(len(self.image_names))
       ]
 
    def __iter__(self):
+      self.resetImageNumbers()
       return self
 
    def __next__(self):
       images_to_use = []
-      if (len(self.image_numbers) < self.batch_size) or :
+      if (
+            (len(self.image_numbers) < self.batch_size) \
+            and (self.num_epochs_elapsed < self.max_num_epochs)
+         ):
          self.resetImageNumbers()
+         self.num_epochs_elapsed += 1
+
+      if self.num_epochs_elapsed == self.max_num_epochs:
+         self.resetImageNumbers()
+         raise StopIteration
 
       for b in range(self.batch_size):
          image_number_index = np.random.randint(0, len(self.image_numbers))
@@ -42,14 +52,15 @@ class JankyImageLoader(object):
 
       pngs = []
       for image_name in images_to_use:
-         pngs.append(preprocess(Image.open(image_name)))
+         pngs.append(self.preprocess(Image.open(image_name)))
       batch = np.stack(pngs)
       self.num_images_loaded += self.batch_size
+
+      return batch
 
    @property
    def epochs(self):
       return self.num_epochs_elapsed
-
 
 def scale_and_shift_pixels(image_in):
    image_out = np.array(2.*image_in/255. - 1, dtype=np.float32)
@@ -160,18 +171,31 @@ def upsample_tf(x):
    return z
 
 if __name__ == "__main__":
-   a = tf.get_variable(name="thing", shape=[3,3,3,5], dtype=tf.float32, initializer=tf.initializers.random_normal())
-   ops, b = upsample_assignop_tf(a)
-   sess = tf.Session()
-   sess.run(tf.global_variables_initializer())
-   print("a")
-   print(sess.run(a[0, :, :, 0]))
-   print("b pre op")
-   print(sess.run(b[0, :, :, 0]))
-   sess.run(ops)
-   print("ops[0]:", ops[0])
-   print("b post op")
-   print(sess.run(b[0, :, :, 0]))
-   print("derivative")
-   print(sess.run(tf.gradients(0.5*tf.reduce_sum(a*a), [a])[0]))
-   print(sess.run(tf.gradients(0.5*tf.reduce_sum(b*b), [a])[0]))
+   # a = tf.get_variable(name="thing", shape=[3,3,3,5], dtype=tf.float32, initializer=tf.initializers.random_normal())
+   # ops, b = upsample_assignop_tf(a)
+   # sess = tf.Session()
+   # sess.run(tf.global_variables_initializer())
+   # print("a")
+   # print(sess.run(a[0, :, :, 0]))
+   # print("b pre op")
+   # print(sess.run(b[0, :, :, 0]))
+   # sess.run(ops)
+   # print("ops[0]:", ops[0])
+   # print("b post op")
+   # print(sess.run(b[0, :, :, 0]))
+   # print("derivative")
+   # print(sess.run(tf.gradients(0.5*tf.reduce_sum(a*a), [a])[0]))
+   # print(sess.run(tf.gradients(0.5*tf.reduce_sum(b*b), [a])[0]))
+
+   import matplotlib.pyplot as plt
+   loader = JankyImageLoader("/home/jg/Documents/stylegan/ffhq-dataset/thisfolderisjustforkeras/images256x256", batch_size=128)
+
+   for j in loader:
+      print(j.shape)
+      print(loader.num_images_loaded)
+      print(loader.epochs)
+
+      # plt.figure()
+      # plt.imshow(j[0, :, :, :])
+      # plt.show()
+      #plt.close()
