@@ -57,7 +57,7 @@ def main(argv):
 
    batch_size = 8
    sess = tf.Session()
-   model = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True)
+   model = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True, use_pl_reg=True)
 
    # gan_data_generator = ImageDataGenerator(
    #    rescale=1,
