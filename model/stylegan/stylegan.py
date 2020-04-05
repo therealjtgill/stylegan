@@ -158,7 +158,7 @@ class stylegan(object):
         # self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00005, beta1=0.0, beta2=0.99, epsilon=1e-8
+            learning_rate=0.0005, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(
@@ -224,7 +224,7 @@ class stylegan(object):
         self.gen_loss = self.wgan_gen_loss + self.gen_path_len_reg
 
         self.gen_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.00025, beta1=0.1, beta2=0.99, epsilon=1e-8
+            learning_rate=0.0005, beta1=0.1, beta2=0.99, epsilon=1e-8
         )
 
         self.gen_minimize = self.gen_optimizer.minimize(
@@ -465,19 +465,25 @@ class stylegan(object):
         A = tf.get_variable(
             "A_style" + str(self.num_style_blocks),
             [256, c_in],
-            initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
         )
         
         conv_weight = tf.get_variable(
             "conv_w_style" + str(self.num_style_blocks),
             [3, 3, c_in, c_out],
-            initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
         )
         
         conv_bias = tf.get_variable(
             "conv_b_style" + str(self.num_style_blocks),
             [1, fm_dimension, fm_dimension, c_out],
-            initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
         )
         
         # Affine transformation of latent space vector.
@@ -491,7 +497,12 @@ class stylegan(object):
         # This increases the number of weights by a factor of batch_size,
         # which is weird.
         modul_conv_weight = tf.einsum("bj,hwjc->bhwjc", scale, conv_weight)
-        sigma_j = 1./tf.sqrt(tf.reduce_sum(tf.square(modul_conv_weight), axis=[1, 2, 3]) + 1e-6)
+        sigma_j = 1./tf.sqrt(
+            tf.reduce_sum(
+                tf.square(modul_conv_weight),
+                axis=[1, 2, 3]
+            ) + 1e-6
+        )
 
         # Need to add biases and broadcast noise.
         V_out_scaled = tf.nn.leaky_relu(
@@ -499,7 +510,21 @@ class stylegan(object):
             alpha=0.2
         )
 
-        return V_out_scaled
+        b = tf.random.normal(shape=latent_w.shape, dtype=tf.float32)
+
+        B = tf.get_variable(
+            "B_style" + str(self.num_style_blocks),
+            [256, c_out],
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
+        )
+
+        noise_input = tf.expand_dims(tf.expand_dims(tf.matmul(b, B), 1), 1)
+
+        V_out_noised = V_out_scaled + noise_input
+
+        return V_out_noised
     
     def upsample(self, V_in):
         # Tested with the channel dimension.
