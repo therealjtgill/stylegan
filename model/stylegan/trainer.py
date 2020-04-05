@@ -105,6 +105,7 @@ def main(argv):
    num_epochs     = 0
    num_iterations = 0
    next_save_time = time.time() + args.save_frequency
+   final_save_time = time.time() + args.save_after_delta_t
 
    save_dir = os.path.join(args.outdir, utils.get_save_folder_name())
    losses_filename = os.path.join(save_dir, "losses.dat")
@@ -153,7 +154,8 @@ def main(argv):
          next_save_time = time.time() + args.save_frequency
          model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
 
-      if time.time() >= args.save_after_delta_t:
+      if time.time() >= final_save_time:
+         final_save_time = np.inf
          model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
 
       losses_file.write(str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\n")
