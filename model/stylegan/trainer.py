@@ -99,13 +99,17 @@ def main(argv):
       preprocess=utils.scale_and_shift_pixels
    )
 
-   disc_losses    = []
-   gen_losses     = []
+   disc_losses    = [-1,]
+   gen_losses     = [-1,]
    num_epochs     = 0
    num_iterations = 0
    next_save_time = time.time() + args.save_frequency
 
    save_dir = os.path.join(args.outdir, utils.get_save_folder_name())
+   losses_filename = os.path.join(save_dir, "losses.dat")
+   os.makedirs(save_dir)
+
+   losses_file = open(losses_filename, "w")
 
    #for x, _ in data_flow:
    for x in data_flow:
@@ -151,6 +155,7 @@ def main(argv):
       if time.time() >= args.save_after_delta_t:
          model.saveParams(save_dir, num_iterations)
 
+      losses_file.write(str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\n")
       print("Iteration ", num_iterations, " took ", time.time() - train_start_time, " seconds.")
 
 if __name__ == "__main__":
