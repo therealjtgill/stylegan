@@ -14,7 +14,7 @@ import utils
 
 np.set_printoptions(threshold=sys.maxsize)
 
-from keras.preprocessing.image import ImageDataGenerator
+#from keras.preprocessing.image import ImageDataGenerator
 
 # In[2]:
 

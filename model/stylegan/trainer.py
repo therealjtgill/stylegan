@@ -19,7 +19,7 @@ def main(argv):
 
    parser.add_argument("-o", "--outdir",
       help     = "Location where training output (e.g. checkpoints and loss " +
-                 "files) should be stored.",
+                 "files) should be stored. pwd by default.",
       required = False,
       default  = "."
    )
@@ -40,17 +40,28 @@ def main(argv):
    )
 
    parser.add_argument("--n_critic",
-      help     = "The number of times to run the critic per minibatch.",
+      help     = "The number of times to run the critic per minibatch. " +
+                 "3 by default."
       required = False,
       default  = 3,
       type     = int
    )
 
    parser.add_argument("--save_frequency",
-      help     = "The number of iterations between saving checkpoints.",
+      help     = "The number of seconds between saving checkpoints. 1 " +
+                 "hour by default."
       required = False,
-      default  = 360, # Roughly every 6 hours on GTX 1080 TI
+      default  = 3600,
       type     = int
+   )
+
+   parser.add_argument("--save_after_delta_t",
+      help     = "Run the saver once after this number of seconds have " +
+                 "elapsed. This is intended for use in HPC environments " +
+                 "where sessions have a fixed amount of time that they are " +
+                 "allowed to run. 4 hours by default."
+      required = False
+      default  = 3600*4,
    )
 
    args = parser.parse_args()
@@ -92,6 +103,7 @@ def main(argv):
    gen_losses     = []
    num_epochs     = 0
    num_iterations = 0
+   next_save_time = time.time() + args.save_frequency
    #for x, _ in data_flow:
    for x in data_flow:
       train_start_time = time.time()
@@ -127,7 +139,13 @@ def main(argv):
             plt.close()
          print("\nGenerated some images! Took", time.time() - gen_start_time, "seconds.\n")
 
-      if (num_iterations % args.save_frequency) == 0:
+      # if (num_iterations % args.save_frequency) == 0:
+      #    model.saveParams(args.outdir, num_iterations)
+      if time.time() >= next_save_time:
+         next_save_time = time.time() + args.save_frequency
+         model.saveParams(args.outdir, num_iterations)
+
+      if time.time() >= args.save_after_delta_t:
          model.saveParams(args.outdir, num_iterations)
 
       print("Iteration ", num_iterations, " took ", time.time() - train_start_time, " seconds.")
