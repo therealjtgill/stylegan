@@ -150,10 +150,10 @@ def main(argv):
       #    model.saveParams(save_dir, num_iterations)
       if time.time() >= next_save_time:
          next_save_time = time.time() + args.save_frequency
-         model.saveParams(save_dir, num_iterations)
+         model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
 
       if time.time() >= args.save_after_delta_t:
-         model.saveParams(save_dir, num_iterations)
+         model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
 
       losses_file.write(str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\n")
       print("Iteration ", num_iterations, " took ", time.time() - train_start_time, " seconds.")
