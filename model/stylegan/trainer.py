@@ -104,6 +104,9 @@ def main(argv):
    num_epochs     = 0
    num_iterations = 0
    next_save_time = time.time() + args.save_frequency
+
+   save_dir = os.path.join(args.outdir, utils.get_save_folder_name())
+
    #for x, _ in data_flow:
    for x in data_flow:
       train_start_time = time.time()
@@ -132,7 +135,7 @@ def main(argv):
             plt.figure()
             plt.imshow(np.array((gen_images[i, :, :, :] + 1.)/2.))
             save_filename = os.path.join(
-               args.outdir,
+               save_dir,
                'generated_image_' + str(num_iterations) + '_' + str(i) + '.png'
             )
             plt.savefig(save_filename)
@@ -140,13 +143,13 @@ def main(argv):
          print("\nGenerated some images! Took", time.time() - gen_start_time, "seconds.\n")
 
       # if (num_iterations % args.save_frequency) == 0:
-      #    model.saveParams(args.outdir, num_iterations)
+      #    model.saveParams(save_dir, num_iterations)
       if time.time() >= next_save_time:
          next_save_time = time.time() + args.save_frequency
-         model.saveParams(args.outdir, num_iterations)
+         model.saveParams(save_dir, num_iterations)
 
       if time.time() >= args.save_after_delta_t:
-         model.saveParams(args.outdir, num_iterations)
+         model.saveParams(save_dir, num_iterations)
 
       print("Iteration ", num_iterations, " took ", time.time() - train_start_time, " seconds.")
 

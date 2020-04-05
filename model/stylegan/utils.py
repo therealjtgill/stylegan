@@ -1,3 +1,4 @@
+import datetime
 import numpy as np
 import os
 from PIL import Image
@@ -91,57 +92,8 @@ def upsample_np(fm_in):
 
    return temp_fm
 
-def upsample_assignop_tf(fm_in):
-   old_h = fm_in.shape[1]
-   old_w = fm_in.shape[2]
-   batch_size = fm_in.shape[0]
-   num_channels = fm_in.shape[3]
-   new_shape = np.array([1, 2, 2, 1])*fm_in.shape
-
-   upsampled = tf.get_variable(
-      shape=new_shape,
-      initializer=tf.initializers.random_normal(),
-      dtype=tf.float32,
-      name="upsampled"
-   )
-
-   assign_ops = []
-   print(new_shape, upsampled.shape)
-   for i in range(old_h):
-      for j in range(old_w):
-         for k in range(batch_size):
-            for l in range(num_channels):
-               # assign_ops.append(
-               #    tf.assign(
-               #       upsampled[k, (2*i):(2*i + 2), (2*j):(2*j + 2), l],
-               #       fm_in[k, i, j, l]
-               #    )
-               # )
-               assign_ops.append(
-                  tf.assign(
-                     upsampled[k, 2*i, 2*j, l],
-                     fm_in[k, i, j, l]
-                  )
-               )
-               assign_ops.append(
-                  tf.assign(
-                     upsampled[k, 2*i, 2*j + 1, l],
-                     fm_in[k, i, j, l]
-                  )
-               )
-               assign_ops.append(
-                  tf.assign(
-                     upsampled[k, 2*i + 1, 2*j, l],
-                     fm_in[k, i, j, l]
-                  )
-               )
-               assign_ops.append(
-                  tf.assign(
-                     upsampled[k, 2*i + 1, 2*j + 1, l],
-                     fm_in[k, i, j, l]
-                  )
-               )
-   return assign_ops, upsampled
+def get_save_folder_name():
+   return str(datetime.datetime.today()).replace(":", "-").replace(" ", "-")
 
 def upsample_tf(x):
    print("shape of x: ", x.shape)
