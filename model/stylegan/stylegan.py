@@ -158,7 +158,7 @@ class stylegan(object):
         # self.disc_loss = self.gan_disc_loss + tf.reduce_mean(self.r1_reg)
         
         self.disc_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.0005, beta1=0.0, beta2=0.99, epsilon=1e-8
+            learning_rate=0.00025, beta1=0.0, beta2=0.99, epsilon=1e-8
         )
         
         self.disc_minimize = self.disc_optimizer.minimize(

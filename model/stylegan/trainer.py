@@ -41,7 +41,7 @@ def main(argv):
 
    parser.add_argument("--n_critic",
       help     = "The number of times to run the critic per minibatch. " +
-                 "3 by default."
+                 "3 by default.",
       required = False,
       default  = 3,
       type     = int
@@ -49,7 +49,7 @@ def main(argv):
 
    parser.add_argument("--save_frequency",
       help     = "The number of seconds between saving checkpoints. 1 " +
-                 "hour by default."
+                 "hour by default.",
       required = False,
       default  = 3600,
       type     = int
@@ -59,8 +59,8 @@ def main(argv):
       help     = "Run the saver once after this number of seconds have " +
                  "elapsed. This is intended for use in HPC environments " +
                  "where sessions have a fixed amount of time that they are " +
-                 "allowed to run. 4 hours by default."
-      required = False
+                 "allowed to run. 4 hours by default.",
+      required = False,
       default  = 3600*4,
    )
 
