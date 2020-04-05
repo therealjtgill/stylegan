@@ -62,6 +62,7 @@ def main(argv):
                  "allowed to run. 4 hours by default.",
       required = False,
       default  = 3600*4,
+      type     = int
    )
 
    args = parser.parse_args()
