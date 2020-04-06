@@ -310,7 +310,7 @@ class stylegan(object):
                 num_output_channels=c_out,
                 fm_dimension=k
             )
-            to_rgb = self.toRgb(block_2, k, k, c_out)
+            to_rgb = self.toRgb(block_2, c_out)
 
             for c_in, c_out, k in config[1:]:
 
@@ -331,7 +331,7 @@ class stylegan(object):
                     fm_dimension=k
                 )
 
-                to_rgb = self.toRgb(block_2, k, k, c_out) + utils.upsample_tf(to_rgb)
+                to_rgb = self.toRgb(block_2, c_out) + utils.upsample_tf(to_rgb)
                 
             c_in, c_out, k = config[-1]
             rgb_out = tf.nn.tanh(to_rgb)
@@ -347,7 +347,7 @@ class stylegan(object):
             from_rgb_k, from_rgb_c_out = config[0]
 
             from_rgb = self.fromRgb(
-                rgb_in, from_rgb_k, from_rgb_k, from_rgb_c_out, id=1
+                rgb_in, from_rgb_c_out, id=1
             )
 
             res = from_rgb
@@ -574,7 +574,7 @@ class stylegan(object):
         #V_out = tf.image.resize_bilinear(V_larger, (h//2, w//2))
         return V_out
     
-    def toRgb(self, V_in, h, w, c_in):
+    def toRgb(self, V_in, c_in):
         '''
         Convert an NxNxC output block to an RGB image with dimensions
         NxNx3.
@@ -584,7 +584,7 @@ class stylegan(object):
 
         to_rgb = tf.get_variable(
             "to_rgb" + str(self.num_to_rgbs),
-            [h, w, c_in, 3],
+            [1, 1, c_in, 3],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         #print("###############")
@@ -596,7 +596,7 @@ class stylegan(object):
         
         return rgb_out
     
-    def fromRgb(self, V_in, h, w, c, id=0):
+    def fromRgb(self, V_in, c, id=0):
         '''
         Convert an NxNx3 output block to an feature map with dimensions
         NxNxC.
@@ -604,7 +604,7 @@ class stylegan(object):
 
         from_rgb = tf.get_variable(
             "from_rgb" + str(id),
-            [h, w, 3, c],
+            [1, 1, 3, c],
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
