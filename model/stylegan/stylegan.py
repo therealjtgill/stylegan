@@ -334,7 +334,8 @@ class stylegan(object):
                 to_rgb = self.toRgb(block_2, c_out) + utils.upsample_tf(to_rgb)
                 
             c_in, c_out, k = config[-1]
-            rgb_out = tf.nn.tanh(to_rgb)
+            #rgb_out = tf.nn.tanh(to_rgb)
+            rgb_out = to_rgb
 
             if rgb_out is None:
                 print("rgb_out is none!")
@@ -609,10 +610,11 @@ class stylegan(object):
             initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
         )
         
-        feature_map_out = tf.nn.tanh(
-            tf.nn.conv2d(V_in, from_rgb, padding="SAME")
-        )
-        
+        # feature_map_out = tf.nn.tanh(
+        #     tf.nn.conv2d(V_in, from_rgb, padding="SAME")
+        # )
+        feature_map_out = tf.nn.conv2d(V_in, from_rgb, padding="SAME")
+
         return feature_map_out
 
     def trainDiscriminatorBatch(self, true_images):
