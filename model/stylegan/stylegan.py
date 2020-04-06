@@ -590,9 +590,10 @@ class stylegan(object):
         #print("###############")
         #print("V_in:", V_in)
         #print("to_rgb:", to_rgb)
-        rgb_out = tf.nn.tanh(
-            tf.nn.conv2d(V_in, to_rgb, padding="SAME")
-        )
+        # rgb_out = tf.nn.tanh(
+        #     tf.nn.conv2d(V_in, to_rgb, padding="SAME")
+        # )
+        rgb_out = tf.nn.conv2d(V_in, to_rgb, padding="SAME")
         
         return rgb_out
     
