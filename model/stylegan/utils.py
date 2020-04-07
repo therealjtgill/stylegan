@@ -52,9 +52,13 @@ class JankyImageLoader(object):
          images_to_use.append(self.image_names[image_name_index])
 
       pngs = []
-      for image_name in images_to_use:
-         pngs.append(self.preprocess(Image.open(image_name)))
-      batch = np.stack(pngs)
+      batch = None
+      try:
+         for image_name in images_to_use:
+            pngs.append(self.preprocess(Image.open(image_name)))
+         batch = np.stack(pngs)
+      except:
+         print("Failed to load at least one of the images in:", images_to_use)
       self.num_images_loaded += self.batch_size
 
       return batch

@@ -586,7 +586,9 @@ class stylegan(object):
         to_rgb = tf.get_variable(
             "to_rgb" + str(self.num_to_rgbs),
             [1, 1, c_in, 3],
-            initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
         )
         #print("###############")
         #print("V_in:", V_in)
@@ -607,7 +609,9 @@ class stylegan(object):
         from_rgb = tf.get_variable(
             "from_rgb" + str(id),
             [1, 1, 3, c],
-            initializer=tf.contrib.layers.variance_scaling_initializer(dtype=tf.float32)
+            initializer=tf.contrib.layers.variance_scaling_initializer(
+                dtype=tf.float32
+            )
         )
         
         # feature_map_out = tf.nn.tanh(
