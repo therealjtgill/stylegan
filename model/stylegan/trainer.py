@@ -65,6 +65,13 @@ def main(argv):
       type     = int
    )
 
+   parser.add_argument("--num_epochs",
+      help     = "Number of training epochs.",
+      required = False,
+      default  = 28,
+      type     = int
+   )
+
    args = parser.parse_args()
 
    batch_size = 8
@@ -97,7 +104,8 @@ def main(argv):
    data_flow = utils.JankyImageLoader(
       dir_to_load=args.train_data_dir,
       batch_size=8,
-      preprocess=utils.scale_and_shift_pixels
+      preprocess=utils.scale_and_shift_pixels,
+      max_num_epochs=args.num_epochs
    )
 
    disc_losses    = [-1,]
