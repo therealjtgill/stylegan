@@ -39,9 +39,9 @@ class stylegan(object):
         
         self.gen_config = [
             (256, 256, 4),
-            (256, 128, 8),
-            (128, 128, 16),
-            (128, 128, 32),
+            (256, 256, 8),
+            (256, 256, 16),
+            (256, 128, 32),
             (128, 128, 64),
             (128, 128, 128),
             (128, 64, 256)
@@ -52,8 +52,8 @@ class stylegan(object):
             (32, 64),
             (64, 128),
             (128, 128),
-            (128, 128),
-            (128, 128)
+            (128, 256),
+            (256, 256)
         ]
 
         if gen_config is not None:
@@ -234,7 +234,7 @@ class stylegan(object):
 
         self.mapper_loss = self.gen_loss
         self.mapper_optimizer = tf.train.AdamOptimizer(
-            learning_rate=0.01*0.002, beta1=0.9, beta2=0.9
+            learning_rate=0.01*0.0005, beta1=0.0, beta2=0.9
         )
         self.mapper_minimize = self.mapper_optimizer.minimize(
             self.mapper_loss,

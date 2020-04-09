@@ -143,6 +143,7 @@ def main(argv):
       if (num_iterations % args.n_critic) == 0:
          gen_start_time = time.time()
          gen_loss = model.trainGeneratorBatch()
+         gen_losses.append(gen_loss)
          print("Generator loss:", gen_loss)
          print("Generator train time:", time.time() - gen_start_time)
 
@@ -154,7 +155,7 @@ def main(argv):
             plt.imshow(np.array((gen_images[i, :, :, :] + 1.)/2.))
             save_filename = os.path.join(
                save_dir,
-               'generated_image_' + str(num_iterations) + '_' + str(i) + '.png'
+               'generated_image_%09d_%02d.png' % (num_iterations, i)
             )
             plt.savefig(save_filename)
             plt.close()
