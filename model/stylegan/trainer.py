@@ -72,11 +72,29 @@ def main(argv):
       type     = int
    )
 
+   parser.add_argument("--save_images_frequency",
+      help     = "Number of seconds between saving images from the generator.",
+      required = False,
+      default  = 360,
+      type     = int
+   )
+
+   parser.add_argument("--load_checkpoint",
+      help     = "The location of a checkpoint to load, including the name " +
+                 "of the checkpoint, but not the file extension.",
+      required = False,
+      default  = None,
+      type     = str
+   )
+
    args = parser.parse_args()
 
    batch_size = 8
    sess = tf.Session()
    model = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True, use_pl_reg=True)
+
+   if args.load_checkpoint is not None:
+      model.loadParams(args.load_checkpoint)
 
    # gan_data_generator = ImageDataGenerator(
    #    rescale=1,

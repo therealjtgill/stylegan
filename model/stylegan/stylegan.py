@@ -655,6 +655,13 @@ class stylegan(object):
         
         self.saver.save(self.sess, save_dir, global_step=global_step)
 
+    def loadParams(self, load_dir):
+        try:
+            self.saver.restore(self.sess, load_dir)
+        except Exception as e:
+            print("Could not load checkpoint with name ", load_dir,
+                  "received exception", str(e)
+            )
 
 # In[3]:
 
