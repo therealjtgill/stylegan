@@ -6,11 +6,8 @@ from stylegan import stylegan
 import sys
 import tensorflow as tf
 import time
-#from utils import scale_and_shift_pixels
 import utils
 np.set_printoptions(threshold=sys.maxsize)
-
-#from keras.preprocessing.image import ImageDataGenerator
 
 def main(argv):
    parser = argparse.ArgumentParser(
@@ -91,33 +88,16 @@ def main(argv):
 
    batch_size = 8
    sess = tf.Session()
-   model = stylegan(sess, gamma=0.5, batch_size=batch_size, use_r1_reg=True, use_pl_reg=True)
+   model = stylegan(
+      sess,
+      gamma=0.5,
+      batch_size=batch_size,
+      use_r1_reg=True,
+      use_pl_reg=True
+   )
 
    if args.load_checkpoint is not None:
       model.loadParams(args.load_checkpoint)
-
-   # gan_data_generator = ImageDataGenerator(
-   #    rescale=1,
-   #    preprocessing_function=utils.scale_and_shift_pixels,
-   #    horizontal_flip=True,
-   # )
-
-   # data_flow = gan_data_generator.flow_from_directory(
-   #    args.train_data_dir,
-   #    target_size=(256, 256),
-   #    batch_size=batch_size,
-   #    shuffle=True
-   # )
-
-   # training_filenames = os.listdir(args.train_data_dir)
-   # dataset = (tf.data.Dataset.from_tensor_slices(training_filenames)
-   #    .map(utils.parse_image_tf, num_parallel_calls=1)
-   #    .shuffle(buffer_size=50)
-   #    .batch(batch_size)
-   #    .prefetch(1)
-   # )
-
-   # iterator = dataset.make_one_shot_iterator()
 
    data_flow = utils.JankyImageLoader(
       dir_to_load=args.train_data_dir,
@@ -131,6 +111,7 @@ def main(argv):
    num_epochs     = 0
    num_iterations = 0
    next_save_time = time.time() + args.save_frequency
+   next_image_gen_time = time.time() + args.save_images_frequency
    final_save_time = time.time() + args.save_after_delta_t
 
    save_dir = os.path.join(args.outdir, utils.get_save_folder_name())
@@ -139,7 +120,6 @@ def main(argv):
 
    losses_file = open(losses_filename, "w")
 
-   #for x, _ in data_flow:
    for x in data_flow:
       if x is None:
          print("Failed to pull a batch of images out of the loader...")
@@ -165,7 +145,7 @@ def main(argv):
          print("Generator loss:", gen_loss)
          print("Generator train time:", time.time() - gen_start_time)
 
-      if (num_iterations % 10*args.n_critic) == 0:
+      if time.time() >= next_image_gen_time:
          gen_start_time = time.time()
          gen_images = model.runGeneratorBatch()
          for i in range(min(gen_images.shape[0], 5)):
@@ -177,20 +157,41 @@ def main(argv):
             )
             plt.savefig(save_filename)
             plt.close()
-         print("\nGenerated some images! Took", time.time() - gen_start_time, "seconds.\n")
+         print(
+            "\nGenerated some images! Took",
+            time.time() - gen_start_time,
+            "seconds.\n"
+         )
+         next_image_gen_time = time.time() + args.save_images_frequency
 
-      # if (num_iterations % args.save_frequency) == 0:
-      #    model.saveParams(save_dir, num_iterations)
       if time.time() >= next_save_time:
          next_save_time = time.time() + args.save_frequency
-         model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
+         model.saveParams(
+            os.path.join(
+               save_dir,
+               "stylegan_ckpt"
+            ),
+            num_iterations
+         )
 
       if time.time() >= final_save_time:
          final_save_time = np.inf
-         model.saveParams(os.path.join(save_dir, "stylegan_ckpt"), num_iterations)
+         model.saveParams(
+            os.path.join(
+               save_dir,
+               "stylegan_ckpt"
+            ),
+            num_iterations
+         )
 
       losses_file.write(str(disc_losses[-1]) + " " + str(gen_losses[-1]) + "\r\n")
-      print("Iteration ", num_iterations, " took ", time.time() - train_start_time, " seconds.")
+      print(
+         "Iteration ",
+         num_iterations,
+         " took ",
+         time.time() - train_start_time,
+         " seconds."
+      )
 
 if __name__ == "__main__":
    main(sys.argv)
