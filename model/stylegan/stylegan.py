@@ -506,10 +506,11 @@ class stylegan(object):
         )
 
         # Need to add biases and broadcast noise.
-        V_out_scaled = tf.nn.leaky_relu(
-            tf.einsum("bhwj,bj->bhwj", V_out, sigma_j) + conv_bias,
-            alpha=0.2
-        )
+        #V_out_scaled = tf.nn.leaky_relu(
+        #    tf.einsum("bhwj,bj->bhwj", V_out, sigma_j) + conv_bias,
+        #    alpha=0.2
+        #)
+        V_out_scaled = tf.einsum("bhwj,bj->bhwj", V_out, sigma_j) + conv_bias
 
         b = tf.random.normal(shape=latent_w.shape, dtype=tf.float32)
 
@@ -523,7 +524,10 @@ class stylegan(object):
 
         noise_input = tf.expand_dims(tf.expand_dims(tf.matmul(b, B), 1), 1)
 
-        V_out_noised = V_out_scaled + noise_input
+        V_out_noised = tf.nn.leaky_relu(
+            V_out_scaled + noise_input,
+            alpha=0.2
+        )
 
         return V_out_noised
     
